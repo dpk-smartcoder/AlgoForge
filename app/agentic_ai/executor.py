@@ -38,7 +38,9 @@ class CodeExecutor:
             self.last_code_hash = None
             self.last_results = []
             self._cleanup_temp()
-            return {"results": [], "all_passed": True, "status": "reset"}
+            # FIX: Changed `return` to `yield`
+            yield {"results": [], "all_passed": True, "status": "reset"}
+            return # Exit the generator after yielding
 
         # Determine which test cases to run
         if mode == "run_failed":
@@ -51,7 +53,9 @@ class CodeExecutor:
                 {"input": r["input"], "expected": r["expected"]} for r in test_cases_to_run
             ]
             if not test_cases_to_run:
-                return {"results": self.last_results, "all_passed": True, "status": "no_failed_tests"}
+                yield {"results": self.last_results, "all_passed": True, "status": "no_failed_tests"}
+                return # Exit the generator
+
         else:
             test_cases_to_run = test_cases
 
@@ -69,17 +73,33 @@ class CodeExecutor:
                 self.last_code_hash = code_hash
 
             if mode == "compile_only":
-                return {"results": [], "all_passed": True, "status": "compiled"}
+                yield {"results": [], "all_passed": True, "status": "compiled"}
+                return # Exit the generator
+
+            # Determine temp dir and filename for mounting and inside container path
+            temp_dir = os.path.dirname(self.compiled_path)
+            filename = os.path.basename(self.compiled_path)
+            container_path = f"/workspace/{filename}"
 
             for case in test_cases_to_run:
                 try:
+                    if isinstance(case["input"], str):
+                        input_data = case["input"].encode()
+                    elif isinstance(case["input"], (list, tuple)):
+                        input_data = " ".join(map(str, case["input"])).encode()
+                    else:
+                        input_data = json.dumps(case["input"]).encode()
+
                     process = await asyncio.create_subprocess_exec(
-                        "python3", self.compiled_path,
+                        "docker", "run", "--rm", "-i",
+                        "-v", f"{temp_dir}:/workspace",
+                        "dsa-executor-image",
+                        "python3", container_path,
                         stdin=asyncio.subprocess.PIPE,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
                     )
-                    stdout, stderr = await asyncio.wait_for(process.communicate(input=json.dumps(case["input"]).encode()), timeout=2)
+                    stdout, stderr = await asyncio.wait_for(process.communicate(input=input_data), timeout=2)
                     output = stdout.decode().strip()
                     if stderr:
                         result = {"input": case["input"], "error": stderr.decode().strip(), "passed": False}
@@ -94,55 +114,116 @@ class CodeExecutor:
 
         # JAVA
         elif self.language == "java":
-            if self.last_code_hash != code_hash or not self.compiled_path:
-                self._cleanup_temp()
-                self.temp_dir_obj = tempfile.TemporaryDirectory()
-                tmpdir = self.temp_dir_obj.name
-
-                self.class_name = "Main" # Reset class name
-                for line in code.splitlines():
-                    if "public class " in line:
-                        self.class_name = line.split("public class ")[1].split("{")[0].strip()
-                        break
-
-                java_path = os.path.join(tmpdir, f"{self.class_name}.java")
-                with open(java_path, "w") as f: f.write(code)
-
-                compile_proc = await asyncio.create_subprocess_exec("javac", java_path, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-                _, stderr = await compile_proc.communicate()
-
-                if compile_proc.returncode != 0:
-                    error_msg = stderr.decode().strip()
-                    for case in test_cases_to_run:
-                        yield {"input": case["input"], "error": f"Compilation error: {error_msg}", "passed": False}
-                    return
-
-                self.compiled_path = tmpdir
-                self.last_code_hash = code_hash
+            # For Java, for each test case, generate a temp directory and a wrapper Main class with hardcoded arrays.
+            # Extract imports and user code body once, reuse for each test case.
+            code_lines = code.splitlines()
+            import_lines = []
+            user_code_body = []
+            found_non_import = False
+            for line in code_lines:
+                striped = line.strip()
+                if not found_non_import and (striped.startswith("import ") or striped.startswith("package ")):
+                    import_lines.append(line)
+                else:
+                    found_non_import = True
+                    user_code_body.append(line)
+            # Remove any import statements from user code body (just in case)
+            user_code_body = [l for l in user_code_body if not l.strip().startswith("import ")]
+            # Ensure "import java.util.*;" is present
+            has_java_util = any("import java.util.*;" in l for l in import_lines)
+            if not has_java_util:
+                import_lines.append("import java.util.*;")
 
             if mode == "compile_only":
-                return {"results": [], "all_passed": True, "status": "compiled"}
+                yield {"results": [], "all_passed": True, "status": "compiled"}
+                return # Exit the generator
 
             for case in test_cases_to_run:
+                # For each test case, create its own temp directory and wrapper
+                temp_dir_obj = tempfile.TemporaryDirectory()
+                tmpdir = temp_dir_obj.name
+                # Extract value and limit arrays from input
+                case_input = case["input"]
+                value_arr = []
+                limit_arr = []
+                try:
+                    if isinstance(case_input, dict) and "value" in case_input and "limit" in case_input:
+                        value_arr = case_input["value"]
+                        limit_arr = case_input["limit"]
+                    else:
+                        raise Exception("Input format error: expected dict with 'value' and 'limit' keys")
+                except Exception as e:
+                    temp_dir_obj.cleanup()
+                    yield {"input": case["input"], "error": f"Input extraction error: {str(e)}", "passed": False}
+                    continue
+                # Convert arrays to Java array syntax
+                def to_java_array(arr):
+                    return "{" + ", ".join(str(x) for x in arr) + "}"
+                value_str = to_java_array(value_arr)
+                limit_str = to_java_array(limit_arr)
+                n_val = len(value_arr)
+                # Build wrapper Main class
+                wrapper_code = (
+                    "public class Main {\n"
+                    "    public static void main(String[] args) {\n"
+                    f"        int n = {n_val};\n"
+                    f"        int[] value = {value_str};\n"
+                    f"        int[] limit = {limit_str};\n"
+                    "        Solution sol = new Solution();\n"
+                    "        System.out.println(sol.maximumActivationValue(value, limit));\n"
+                    "    }\n"
+                    "}\n"
+                )
+                # Assemble: imports, wrapper, user code body
+                full_code = "\n".join(import_lines) + "\n\n" + wrapper_code + "\n" + "\n".join(user_code_body)
+                java_path = os.path.join(tmpdir, "Main.java")
+                with open(java_path, "w") as f:
+                    f.write(full_code)
+                # Compile inside docker
+                try:
+                    compile_proc = await asyncio.create_subprocess_exec(
+                        "docker", "run", "--rm", "-i",
+                        "-v", f"{tmpdir}:/workspace",
+                        "dsa-executor-image",
+                        "javac", "/workspace/Main.java",
+                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                    )
+                    _, stderr = await compile_proc.communicate()
+                    if compile_proc.returncode != 0:
+                        error_msg = stderr.decode().strip()
+                        temp_dir_obj.cleanup()
+                        yield {"input": case["input"], "error": f"Compilation error: {error_msg}", "passed": False}
+                        continue
+                except Exception as e:
+                    temp_dir_obj.cleanup()
+                    yield {"input": case["input"], "error": f"Compilation exception: {str(e)}", "passed": False}
+                    continue
+                # Run the compiled Main class (no stdin)
                 try:
                     run_proc = await asyncio.create_subprocess_exec(
-                        "java", "-cp", self.compiled_path, self.class_name,
+                        "docker", "run", "--rm", "-i",
+                        "-v", f"{tmpdir}:/workspace",
+                        "dsa-executor-image",
+                        "java", "-cp", "/workspace", "Main",
                         stdin=asyncio.subprocess.PIPE,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
                     )
-                    stdout, stderr = await asyncio.wait_for(run_proc.communicate(input=json.dumps(case["input"]).encode()), timeout=2)
+                    stdout, stderr = await asyncio.wait_for(run_proc.communicate(input=None), timeout=2)
                     output = stdout.decode().strip()
-                    if stderr:
-                         result = {"input": case["input"], "error": stderr.decode().strip(), "passed": False}
+                    if stderr and stderr.decode().strip():
+                        result = {"input": case["input"], "error": stderr.decode().strip(), "passed": False}
                     else:
                         passed = output == str(case["expected"])
                         result = {"input": case["input"], "output": output, "expected": case["expected"], "passed": passed}
                 except asyncio.TimeoutError:
                     run_proc.kill()
                     result = {"input": case["input"], "error": "Timeout", "passed": False}
+                except Exception as e:
+                    result = {"input": case["input"], "error": f"Runtime exception: {str(e)}", "passed": False}
                 results.append(result)
                 yield result
+                temp_dir_obj.cleanup()
 
         # CPP
         elif self.language == "cpp":
@@ -155,7 +236,14 @@ class CodeExecutor:
 
                 with open(cpp_path, "w") as f: f.write(code)
 
-                compile_proc = await asyncio.create_subprocess_exec("g++", cpp_path, "-o", exe_path, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                # Compile inside docker
+                compile_proc = await asyncio.create_subprocess_exec(
+                    "docker", "run", "--rm", "-i",
+                    "-v", f"{tmpdir}:/workspace",
+                    "dsa-executor-image",
+                    "g++", "/workspace/solution.cpp", "-o", "/workspace/solution.out",
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                )
                 _, stderr = await compile_proc.communicate()
 
                 if compile_proc.returncode != 0:
@@ -168,17 +256,32 @@ class CodeExecutor:
                 self.last_code_hash = code_hash
 
             if mode == "compile_only":
-                return {"results": [], "all_passed": True, "status": "compiled"}
+                yield {"results": [], "all_passed": True, "status": "compiled"}
+                return # Exit the generator
+
+            temp_dir = os.path.dirname(self.compiled_path)
+            exe_filename = os.path.basename(self.compiled_path)
+            container_path = f"/workspace/{exe_filename}"
 
             for case in test_cases_to_run:
                 try:
+                    if isinstance(case["input"], str):
+                        input_data = case["input"].encode()
+                    elif isinstance(case["input"], (list, tuple)):
+                        input_data = " ".join(map(str, case["input"])).encode()
+                    else:
+                        input_data = json.dumps(case["input"]).encode()
+
                     run_proc = await asyncio.create_subprocess_exec(
-                        self.compiled_path,
+                        "docker", "run", "--rm", "-i",
+                        "-v", f"{temp_dir}:/workspace",
+                        "dsa-executor-image",
+                        container_path,
                         stdin=asyncio.subprocess.PIPE,
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
                     )
-                    stdout, stderr = await asyncio.wait_for(run_proc.communicate(input=json.dumps(case["input"]).encode()), timeout=2)
+                    stdout, stderr = await asyncio.wait_for(run_proc.communicate(input=input_data), timeout=2)
                     output = stdout.decode().strip()
                     if stderr:
                         result = {"input": case["input"], "error": stderr.decode().strip(), "passed": False}

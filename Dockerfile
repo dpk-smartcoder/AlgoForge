@@ -15,11 +15,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Set the working directory inside the container
-WORKDIR /app
+WORKDIR /workspace
 
-# Copy the Python executor script into the container
-COPY app/agentic_ai/executor.py .
-
-# Command to run when the container starts
-# This will start the executor loop, ready to receive commands
-CMD ["python3", "app/agentic_ai/executor.py"]
+# Default command to start bash shell
+CMD ["bash"]
