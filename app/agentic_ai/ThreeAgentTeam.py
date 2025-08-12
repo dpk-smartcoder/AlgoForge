@@ -119,8 +119,8 @@ def generate_code_diff(old_code, new_code):
 # - or synchronous return (dict/list).
 #
 max_initial_refinements = 1
-max_turns = 1
-cross_pollinate_rounds =1
+max_turns = 10
+cross_pollinate_rounds =3
 
 # Use merged test cases from both data.json and randomTestCase
 # This variable correctly remains a list of dicts for the executor

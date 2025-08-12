@@ -108,7 +108,7 @@ class AlgoForgeAgent:
         return executable_code
 
     async def run_tests(self, code: str, test_cases: List[Dict]) -> Dict:
-        """Run generated code on test cases using the pre-configured executor."""
+        import json
         result = await self.executor.run_code(code, test_cases)
         if self.history:
             self.history[-1]["result"] = result

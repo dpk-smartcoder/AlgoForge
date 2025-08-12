@@ -1,7 +1,7 @@
 [
   {
     "team": "Rescue_Team",
-    "code": "import java.util.*;\n\nclass Solution {\n    public int maximumActivationValue(int[] value, int[] limit) {\n        int n = value.length;\n        int activeCount = 0;\n        int totalValue = 0;\n\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n\n        for (int i = 0; i < n; i++) {\n            pq.offer(new int[]{value[i], limit[i]});\n        }\n\n        while (!pq.isEmpty()) {\n            int[] current = pq.poll();\n            int currentValue = current[0];\n            int currentLimit = current[1];\n\n            if (activeCount < currentLimit) {\n                totalValue += currentValue;\n                activeCount++;\n            }\n\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n\n            for(int[] next : pq) {\n                if (next[1] > activeCount) {\n                    newPQ.offer(next);\n                }\n            }\n\n            pq = newPQ;\n        }\n\n        return totalValue;\n    }\n}",
+    "code": "import java.util.*;\n\nclass Solution {\n    public int maximumActivationValue(int[] value, int[] limit) {\n        int n = value.length;\n        int[][] pairs = new int[n][2];\n        for (int i = 0; i < n; i++) {\n            pairs[i] = new int[]{value[i], limit[i]};\n        }\n\n        Arrays.sort(pairs, (a, b) -> {\n            double ratioA = (double) a[0] / a[1];\n            double ratioB = (double) b[0] / b[1];\n            if (ratioA > ratioB) return -1;\n            if (ratioA < ratioB) return 1;\n            return 0;\n        });\n\n        int activeCount = 0;\n        int totalValue = 0;\n        boolean[] active = new boolean[n];\n\n        for (int i = 0; i < n; i++) {\n            int val = pairs[i][0];\n            int lim = pairs[i][1];\n            if (!active[i] && activeCount < lim) {\n                active[i] = true;\n                totalValue += val;\n                activeCount++;\n                //Critical fix:  Iterate through *all* elements, and\n                //deactivate if appropriate.  This is critical for the\n                //cases where the ratio ties.\n                for (int j = 0; j < n; j++) {\n                  if(active[j] && limit[j] <= activeCount)\n                  {\n                      active[j] = false;\n                      activeCount--;\n                  }\n                }\n            }\n        }\n\n        return totalValue;\n    }\n}",
     "status": "unsolved",
     "source": "rescue_mode_final",
     "test_results": [
@@ -18,8 +18,9 @@
             3
           ]
         },
-        "error": "Compilation error: /workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                ^\n/workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                              ^\n4 errors",
-        "passed": false
+        "output": "16",
+        "expected": 16,
+        "passed": true
       },
       {
         "input": {
@@ -34,7 +35,8 @@
             1
           ]
         },
-        "error": "Compilation error: /workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                ^\n/workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                              ^\n4 errors",
+        "output": "12",
+        "expected": 6,
         "passed": false
       },
       {
@@ -52,8 +54,9 @@
             3
           ]
         },
-        "error": "Compilation error: /workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                ^\n/workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                              ^\n4 errors",
-        "passed": false
+        "output": "12",
+        "expected": 12,
+        "passed": true
       },
       {
         "input": {
@@ -64,8 +67,9 @@
             1
           ]
         },
-        "error": "Compilation error: /workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                ^\n/workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                              ^\n4 errors",
-        "passed": false
+        "output": "10",
+        "expected": 10,
+        "passed": true
       },
       {
         "input": {
@@ -78,8 +82,9 @@
             2
           ]
         },
-        "error": "Compilation error: /workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                ^\n/workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                              ^\n4 errors",
-        "passed": false
+        "output": "3",
+        "expected": 3,
+        "passed": true
       },
       {
         "input": {
@@ -96,8 +101,9 @@
             4
           ]
         },
-        "error": "Compilation error: /workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                ^\n/workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                              ^\n4 errors",
-        "passed": false
+        "output": "50",
+        "expected": 50,
+        "passed": true
       },
       {
         "input": {
@@ -114,8 +120,9 @@
             4
           ]
         },
-        "error": "Compilation error: /workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                ^\n/workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                              ^\n4 errors",
-        "passed": false
+        "output": "100003",
+        "expected": 100003,
+        "passed": true
       },
       {
         "input": {
@@ -132,8 +139,9 @@
             1
           ]
         },
-        "error": "Compilation error: /workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                ^\n/workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                              ^\n4 errors",
-        "passed": false
+        "output": "100003",
+        "expected": 100003,
+        "passed": true
       },
       {
         "input": {
@@ -152,7 +160,8 @@
             5
           ]
         },
-        "error": "Compilation error: /workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                ^\n/workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                              ^\n4 errors",
+        "output": "26",
+        "expected": 27,
         "passed": false
       },
       {
@@ -170,28 +179,29 @@
             2
           ]
         },
-        "error": "Compilation error: /workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                ^\n/workspace/Main.java:20: error: array required, but Object found\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                       ^\n/workspace/Main.java:36: error: array required, but Object found\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]).reversed());\n                                                                                                              ^\n4 errors",
+        "output": "30",
+        "expected": 18,
         "passed": false
       }
     ],
     "reason": "All teams failed after cross-pollination",
-    "context_length_used": 19118
+    "context_length_used": 22031
   },
   {
     "team": "A_Team",
-    "code": "import java.util.*;\n\nclass Solution {\n    public int maximumActivationValue(int[] value, int[] limit) {\n        int n = value.length;\n        int activeCount = 0;\n        int totalValue = 0;\n\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]));\n        for (int i = 0; i < n; i++) {\n            pq.offer(new int[]{value[i], limit[i]});\n        }\n\n        while (!pq.isEmpty()) {\n            int[] current = pq.poll();\n            int currentValue = current[0];\n            int currentLimit = current[1];\n            if (activeCount < currentLimit) {\n                totalValue += currentValue;\n                activeCount++;\n            }\n            //Crucially, this is now correct! It removes elements whose limit has been met.\n            PriorityQueue<int[]> newPQ = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]));\n            while (!pq.isEmpty()) {\n                int[] next = pq.poll();\n                if (next[1] > activeCount) {\n                    newPQ.offer(next);\n                }\n            }\n            pq = newPQ;\n        }\n\n        return totalValue;\n    }\n}",
+    "code": "import java.util.*;\n\nclass Solution {\n    public int maxActivationValue(int[] value, int[] limit) {\n        int n = value.length;\n        int[][] pairs = new int[n][2];\n        for (int i = 0; i < n; i++) {\n            pairs[i] = new int[]{value[i], limit[i]};\n        }\n\n        Arrays.sort(pairs, (a, b) -> (int) (((double) b[0] / b[1]) - ((double) a[0] / a[1]) > 0 ? 1 : -1));\n\n        int activeCount = 0;\n        int totalValue = 0;\n        boolean[] active = new boolean[n];\n\n        for (int i = 0; i < n; i++) {\n            int val = pairs[i][0];\n            int lim = pairs[i][1];\n            if (!active[i] && activeCount < lim) {\n                active[i] = true;\n                totalValue += val;\n                activeCount++;\n                for (int j = 0; j < n; j++) {\n                    if (active[j] && limit[j] <= activeCount) {\n                        active[j] = false;\n                        activeCount--;\n                    }\n                }\n            }\n        }\n\n        return totalValue;\n    }\n\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        int n = scanner.nextInt();\n        int[] value = new int[n];\n        int[] limit = new int[n];\n        for (int i = 0; i < n; i++) {\n            value[i] = scanner.nextInt();\n        }\n        for (int i = 0; i < n; i++) {\n            limit[i] = scanner.nextInt();\n        }\n        scanner.close();\n\n        Solution sol = new Solution(); \n        int result = sol.maxActivationValue(value, limit);\n        System.out.println(result);\n    }\n}",
     "status": "unsolved",
     "summary": ""
   },
   {
     "team": "B_Team",
-    "code": "import java.util.*;\n\nclass Solution {\n    public int maximumActivationValue(int[] value, int[] limit) {\n        int n = value.length;\n        int activeCount = 0;\n        int totalValue = 0;\n\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1], Comparator.reverseOrder()));\n        for (int i = 0; i < n; i++) {\n            pq.offer(new int[]{value[i], limit[i]});\n        }\n\n        while (!pq.isEmpty()) {\n            int[] current = pq.poll();\n            int currentValue = current[0];\n            int currentLimit = current[1];\n            if (activeCount < currentLimit) {\n                totalValue += currentValue;\n                activeCount++;\n            }\n        }\n\n        return totalValue;\n    }\n}",
+    "code": "import java.util.Arrays;\nimport java.util.Comparator;\nimport java.util.Scanner;\n\nclass Solution {\n    public int maxActivationValue(int[] value, int[] limit) {\n        int n = value.length;\n        int[][] pairs = new int[n][2];\n        for (int i = 0; i < n; i++) {\n            pairs[i] = new int[]{value[i], limit[i]};\n        }\n\n        Arrays.sort(pairs, (a, b) -> (int) (((double) b[0] / b[1]) - ((double) a[0] / a[1]) > 0 ? 1 : -1));\n\n        int activeCount = 0;\n        int totalValue = 0;\n        boolean[] active = new boolean[n];\n\n        for (int i = 0; i < n; i++) {\n            int val = pairs[i][0];\n            int lim = pairs[i][1];\n            if (!active[i] && activeCount < lim) {\n                active[i] = true;\n                totalValue += val;\n                activeCount++;\n                for (int j = 0; j < n; j++) {\n                    if (active[j] && limit[j] <= activeCount) {\n                        active[j] = false;\n                        activeCount--;\n                    }\n                }\n            }\n        }\n\n        return totalValue;\n    }\n\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        int n = scanner.nextInt();\n        int[] value = new int[n];\n        int[] limit = new int[n];\n        for (int i = 0; i < n; i++) {\n            value[i] = scanner.nextInt();\n        }\n        for (int i = 0; i < n; i++) {\n            limit[i] = scanner.nextInt();\n        }\n        scanner.close();\n\n        Solution sol = new Solution(); \n        int result = sol.maxActivationValue(value, limit);\n        System.out.println(result);\n    }\n}",
     "status": "unsolved",
     "summary": ""
   },
   {
     "team": "C_Team",
-    "code": "import java.util.*;\n\nclass Solution {\n    public int maximumActivationValue(int[] value, int[] limit) {\n        int n = value.length;\n        int activeCount = 0;\n        int totalValue = 0;\n\n        PriorityQueue<int[]> pq = new PriorityQueue<>(Comparator.comparingDouble(a -> (double) a[0] / a[1]));\n        for (int i = 0; i < n; i++) {\n            pq.offer(new int[]{value[i], limit[i]});\n        }\n\n        while (!pq.isEmpty()) {\n            int[] current = pq.poll();\n            int currentValue = current[0];\n            int currentLimit = current[1];\n            if (activeCount < currentLimit) {\n                totalValue += currentValue;\n                activeCount++;\n            }\n        }\n\n        return totalValue;\n    }\n}",
+    "code": "import java.util.*;\n\nclass Solution {\n    public int maxActivationValue(int[] value, int[] limit) {\n        int n = value.length;\n        int[][] pairs = new int[n][2];\n        for (int i = 0; i < n; i++) {\n            pairs[i] = new int[]{value[i], limit[i]};\n        }\n\n        Arrays.sort(pairs, (a, b) -> (int) (((double) b[0] / b[1]) - ((double) a[0] / a[1]) > 0 ? 1 : -1));\n\n        int activeCount = 0;\n        int totalValue = 0;\n        boolean[] active = new boolean[n];\n\n        for (int i = 0; i < n; i++) {\n            int val = pairs[i][0];\n            int lim = pairs[i][1];\n            if (!active[i] && activeCount < lim) {\n                active[i] = true;\n                totalValue += val;\n                activeCount++;\n                for (int j = 0; j < n; j++) {\n                    if (active[j] && limit[j] <= activeCount) {\n                        active[j] = false;\n                        activeCount--;\n                    }\n                }\n            }\n        }\n\n        return totalValue;\n    }\n}",
     "status": "unsolved",
     "summary": ""
   }
