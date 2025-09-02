@@ -1,180 +1,206 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useHistoryData } from '../providers/HistoryProvider';
-import { FiClock, FiCheckCircle, FiXCircle, FiLoader, FiEye, FiDatabase, FiTrash2, FiExternalLink } from 'react-icons/fi';
+import { FiClock, FiCheckCircle, FiXCircle, FiLoader, FiEye, FiDatabase, FiTrash2, FiExternalLink, FiAlertTriangle } from 'react-icons/fi';
+
+// --- Confirmation Modal Component ---
+const ConfirmationModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}> = ({ isOpen, onClose, onConfirm }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fadeIn"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-neutral-800 rounded-xl shadow-2xl p-6 m-4 max-w-sm w-full animate-fadeInUp"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex flex-col items-center text-center">
+          <div className="bg-red-100 dark:bg-red-900/30 p-3 rounded-full mb-4">
+            <FiAlertTriangle className="text-red-500 dark:text-red-400" size={24} />
+          </div>
+          <h2 className="text-lg font-bold text-neutral-800 dark:text-neutral-100">Reset History?</h2>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-2">
+            Are you sure you want to delete all simulated history? This action cannot be undone.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 mt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-neutral-100 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-colors font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors font-medium"
+          >
+            Yes, Reset
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Skeleton Loader Component ---
+const SkeletonCard: React.FC = () => (
+  <div className="bg-white dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-800 rounded-xl p-4 animate-pulse">
+    <div className="flex items-center justify-between mb-4">
+      <div className="h-4 bg-neutral-200 dark:bg-neutral-700 rounded w-1/4"></div>
+      <div className="h-3 bg-neutral-200 dark:bg-neutral-700 rounded w-1/6"></div>
+    </div>
+    <div className="h-5 bg-neutral-200 dark:bg-neutral-700 rounded w-3/4 mb-3"></div>
+    <div className="h-4 bg-neutral-200 dark:bg-neutral-700 rounded w-full mb-4"></div>
+    <div className="h-10 bg-neutral-200 dark:bg-neutral-700 rounded-lg w-full"></div>
+  </div>
+);
 
 export const HistoryList: React.FC = () => {
-  const { items, loading, error, refreshHistory, isUsingMock, clearMockData, getMockStats } = useHistoryData();
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  
+  const { items, loading, error, refreshHistory, isUsingMock, clearMockData } = useHistoryData();
   const navigate = useNavigate();
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'solved':
-        return <FiCheckCircle className="text-green-500" />;
+        return <FiCheckCircle className="text-green-500" size={20} />;
       case 'failed':
-        return <FiXCircle className="text-red-500" />;
+        return <FiXCircle className="text-red-500" size={20} />;
       case 'pending':
-        return <FiLoader className="text-blue-500 animate-spin" />;
+        return <FiLoader className="text-blue-500 animate-spin" size={20} />;
       default:
-        return <FiClock className="text-neutral-500" />;
+        return <FiClock className="text-neutral-500" size={20} />;
     }
   };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'solved':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 'failed':
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-      case 'pending':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-      default:
-        return 'bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-200';
-    }
-  };
-
+  
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
-    
-    if (diffInHours < 1) {
-      return 'Just now';
-    } else if (diffInHours < 24) {
-      return `${Math.floor(diffInHours)}h ago`;
-    } else {
-      return date.toLocaleDateString();
-    }
+    return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).format(date);
   };
 
   const viewProblemDetails = (problemId: string) => {
     navigate(`/problem/${problemId}`);
   };
 
+  const handleConfirmReset = () => {
+    clearMockData();
+    setIsConfirmModalOpen(false);
+  };
+  
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <FiLoader className="animate-spin text-blue-500 mr-2" />
-        <span className="text-sm text-neutral-500">Loading history...</span>
+      <div className="space-y-4 max-w-3xl mx-auto">
+        {[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-center py-4">
-        <div className="text-sm text-red-500 mb-2">{error}</div>
+      <div className="text-center py-12 max-w-md mx-auto">
+        <FiXCircle className="mx-auto text-red-400 mb-3" size={32} />
+        <h3 className="font-semibold text-neutral-800 dark:text-neutral-200">Failed to load history</h3>
+        <p className="text-sm text-red-500 dark:text-red-400 mt-1 mb-4">{error}</p>
         <button 
           onClick={refreshHistory}
-          className="text-xs text-blue-500 hover:underline"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
         >
-          Try again
+          Try Again
         </button>
       </div>
     );
   }
 
-  if (!items.length) {
+  if (!items.length && !isUsingMock) { // Hide if using mock and there are no items, so the reset button shows.
     return (
-      <div className="text-center py-8">
-        <FiClock className="mx-auto text-neutral-400 mb-2" size={24} />
-        <div className="text-sm text-neutral-500">No problems submitted yet</div>
-        <div className="text-xs text-neutral-400 mt-1">Submit your first problem to see it here</div>
+      <div className="text-center py-16 max-w-md mx-auto">
+        <FiDatabase className="mx-auto text-neutral-400 dark:text-neutral-600 mb-3" size={32} />
+        <h3 className="font-semibold text-neutral-800 dark:text-neutral-200">No Submissions Yet</h3>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">Submit your first problem to see your history here.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      {/* Mock API Status Indicator */}
-      {isUsingMock && (
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 mb-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <FiDatabase className="text-yellow-600" />
-              <div>
-                <div className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                  🔧 Mock Mode Active
-                </div>
-                <div className="text-xs text-yellow-600 dark:text-yellow-300">
-                  Using simulated backend - no real MongoDB connection
-                </div>
-              </div>
+    <>
+      <div className="space-y-6 max-w-3xl mx-auto">
+        {isUsingMock && (
+          <div className="bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl p-4 mb-4 flex items-center justify-between animate-fadeInUp">
+            <div>
+              <h4 className="font-semibold text-neutral-800 dark:text-neutral-200">Manage History</h4>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">This is simulated data for demonstration.</p>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="text-xs text-yellow-600 dark:text-yellow-300">
-                {getMockStats().totalProblems} problems, {getMockStats().solvedProblems} solved
-              </div>
-              <button
-                onClick={clearMockData}
-                className="p-1 text-yellow-600 hover:text-yellow-800 dark:text-yellow-400 dark:hover:text-yellow-200"
-                title="Clear mock data"
-              >
-                <FiTrash2 size={14} />
-              </button>
-            </div>
+            <button
+              onClick={() => setIsConfirmModalOpen(true)}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500 text-white transition-colors duration-300 ease-in-out hover:bg-red-600 active:scale-95 text-sm font-medium"
+              title="Reset all mock data"
+            >
+              <FiTrash2 size={14} />
+              Reset History
+            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {items.map((item) => (
-        <div key={item._id} className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 hover:shadow-md transition-shadow">
-          {/* Status and Title */}
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-2">
-              {getStatusIcon(item.status)}
-              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
-                {item.status}
-              </span>
-              {isUsingMock && item._id.startsWith('mock_') && (
-                <span className="text-xs text-neutral-400">(Mock)</span>
-              )}
-            </div>
-            <span className="text-xs text-neutral-500">
-              {formatDate(item.createdAt)}
-            </span>
-          </div>
-
-          {/* Problem Title */}
-          <h3 className="font-medium text-neutral-900 dark:text-neutral-100 mb-2 line-clamp-2">
-            {item.title}
-          </h3>
-
-          {/* Quick Preview */}
-          {item.problemText && (
-            <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3 line-clamp-2">
-              {item.problemText}
-            </p>
-          )}
-
-          {/* Solution Preview */}
-          {item.solution && (
-            <div className="mb-3 p-2 bg-green-50 dark:bg-green-900/20 rounded border border-green-200 dark:border-green-800">
-              <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
-                <FiCheckCircle size={14} />
-                <span className="text-xs font-medium">Solution Ready</span>
-              </div>
-              {item.solution.timeComplexity && (
-                <div className="text-xs text-green-600 dark:text-green-400 mt-1">
-                  Time: {item.solution.timeComplexity}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Action Button */}
-          <button
+        {/* --- FIX: Restored the full code for the list item card --- */}
+        {items.map((item, index) => (
+          <div 
+            key={item._id} 
+            className="bg-white dark:bg-neutral-800/50 border border-neutral-200/80 dark:border-neutral-800 rounded-xl overflow-hidden transition-all duration-300 hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-700 hover:scale-[1.02] animate-fadeInUp"
+            style={{ animationDelay: `${index * 100}ms`, animationFillMode: 'backwards' }}
             onClick={() => viewProblemDetails(item._id)}
-            className="w-full mt-3 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+            role="button"
+            tabIndex={0}
           >
-            <FiEye size={14} />
-            View Details
-            <FiExternalLink size={12} />
-          </button>
-        </div>
-      ))}
-    </div>
+            <div className="p-5">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  {getStatusIcon(item.status)}
+                  <h3 className="font-semibold text-lg text-neutral-800 dark:text-neutral-100 line-clamp-1">
+                    {item.title}
+                  </h3>
+                </div>
+                <span className="text-xs text-neutral-500 dark:text-neutral-400 flex-shrink-0 ml-4">
+                  {formatDate(item.createdAt)}
+                </span>
+              </div>
+              {item.problemText && (
+                <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-4 line-clamp-2">
+                  {item.problemText}
+                </p>
+              )}
+              {item.solution && (
+                <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800 text-xs">
+                  <div className="flex justify-between items-center text-blue-800 dark:text-blue-200 font-medium">
+                    <span>Solution Snapshot</span>
+                    <div className="flex items-center gap-3">
+                      {item.solution.timeComplexity && <span>Time: {item.solution.timeComplexity}</span>}
+                      {item.solution.spaceComplexity && <span>Space: {item.solution.spaceComplexity}</span>}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="bg-neutral-50 dark:bg-neutral-800 px-5 py-3 border-t border-neutral-200/80 dark:border-neutral-800">
+               <div className="text-sm font-medium text-blue-600 dark:text-blue-400 flex items-center gap-2">
+                View Analysis <FiExternalLink size={14} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      <ConfirmationModal 
+        isOpen={isConfirmModalOpen}
+        onClose={() => setIsConfirmModalOpen(false)}
+        onConfirm={handleConfirmReset}
+      />
+    </>
   );
 };
-
-

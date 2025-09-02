@@ -201,22 +201,28 @@ export const ProblemResult: React.FC = () => {
                   </div>
                 )}
 
+                {/* CORRECTED: Properly handle one or more image URLs */}
                 {problem.imageUrl && (
                   <div>
                     <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-2 uppercase tracking-wide">
-                      Problem Image
+                      Problem Images
                     </h3>
-                    <div className="flex items-center gap-2">
-                      <FiImage className="text-neutral-400" />
-                      <a 
-                        href={problem.imageUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-blue-500 hover:underline inline-flex items-center gap-1"
-                      >
-                        View Image
-                        <FiExternalLink size={14} />
-                      </a>
+                    <div className="flex flex-col space-y-2">
+                      {problem.imageUrl.split(',').map((url, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                           <FiImage className="text-neutral-400 flex-shrink-0" />
+                           <a 
+                             href={url} 
+                             target="_blank" 
+                             rel="noopener noreferrer"
+                             className="text-blue-500 hover:underline inline-flex items-center gap-1 truncate"
+                             title={url}
+                           >
+                             <span>View Image {index + 1}</span>
+                             <FiExternalLink size={14} />
+                           </a>
+                         </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -294,7 +300,7 @@ export const ProblemResult: React.FC = () => {
                           <div key={index} className="relative">
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
-                                {index === 0 ? 'Main Solution' : `Helper Function ${index}`}
+                                {snippet.length > 0 ? (index === 0 ? 'Main Solution' : `Helper Function ${index}`) : 'Code'}
                               </span>
                               <button
                                 onClick={() => copyToClipboard(snippet, `code-${index}`)}
@@ -309,7 +315,7 @@ export const ProblemResult: React.FC = () => {
                               </button>
                             </div>
                             <pre className="bg-neutral-900 text-neutral-100 p-4 rounded-lg overflow-x-auto text-sm font-mono leading-relaxed">
-                              {snippet}
+                              <code>{snippet}</code>
                             </pre>
                           </div>
                         ))}

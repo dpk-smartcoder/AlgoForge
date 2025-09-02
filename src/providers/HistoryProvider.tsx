@@ -55,7 +55,6 @@ export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ child
       } else {
         historyData = await apiService.getHistory();
       }
-      
       setItems(historyData);
     } catch (err) {
       console.error('Failed to fetch history:', err);
