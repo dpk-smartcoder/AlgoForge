@@ -1,13 +1,14 @@
 from app.agentic_ai.executor import CodeExecutor
 from app.agentic_ai.team_class import AlgoForgeAgent
 from app.agentic_ai.model_client import Model_Client
+from autogen_agentchat.agents import AssistantAgent
 from dotenv import load_dotenv
 import os
 import json
 import asyncio
 import inspect
 import difflib
-import os
+import re
 def safe_load_json(path, default=None):
     if default is None:
         default = {}
@@ -51,6 +52,12 @@ executor=CodeExecutor(language)
 teamA=AlgoForgeAgent("A_Team",Model_Client(model=model1,API_KEY=API_KEY1).getClient(),executor,language)
 teamB=AlgoForgeAgent("B_Team",Model_Client(model=model2,API_KEY=API_KEY2).getClient(),executor,language)
 teamC=AlgoForgeAgent("C_Team",Model_Client(model=model3,API_KEY=API_KEY3).getClient(),executor,language)
+
+summarizer=AssistantAgent(
+    name="summarizer",
+    model_client=Model_Client(model=model4,API_KEY=API_KEY4).getClient(),
+    system_message="You are an expert data structure and algorithm code analyzer"
+)
 
 data = safe_load_json("data.json", {"problem": {}})
 randomTestCase = safe_load_json("random.json", {"test_case": []})
@@ -125,6 +132,60 @@ cross_pollinate_rounds =3
 # Use merged test cases from both data.json and randomTestCase
 # This variable correctly remains a list of dicts for the executor
 test_cases = merged_test_cases
+# In ThreeAgentTeam.py
+async def generate_summary_for_code(code_string):
+    """
+    Uses an AI model to analyze code and generate a JSON object with
+    a descriptive summary, time, and space complexity.
+    """
+    if not code_string or code_string == "<no code>":
+        return {
+            "summary": "N/A",
+            "time_complexity": "N/A",
+            "space_complexity": "N/A"
+        }
+
+    summary_prompt = (
+        "You are a code analysis expert. Analyze the following code.\n"
+        "Respond ONLY with a single valid JSON object. Do not include markdown, explanations, or text outside JSON.\n"
+        "JSON format:\n"
+        "{\n"
+        '  "time_complexity": "O(X)",\n'
+        '  "space_complexity": "O(Y)",\n'
+        '  "summary": "Brief 2-3 line explanation of the approach."\n'
+        "}\n\n"
+        f"### Code ###\n{code_string}\n"
+    )
+
+    try:
+        response = await summarizer.run(task=summary_prompt)
+        response_text=response.messages[-1].content
+        # Normalize response to string
+        print(response_text)
+
+        # Extract JSON with stricter regex for top-level JSON object
+        match = re.search(r'\{(?:[^{}]|(?:\{[^{}]*\}))*\}', response_text, re.DOTALL)
+        if match:
+            data = json.loads(match.group(0))
+            return {
+                "summary": data.get("summary", "Parsing Failed"),
+                "time_complexity": data.get("time_complexity", "Parsing Failed"),
+                "space_complexity": data.get("space_complexity", "Parsing Failed"),
+            }
+        else:
+            return {
+                "summary": "Parsing Failed",
+                "time_complexity": "Parsing Failed",
+                "space_complexity": "Parsing Failed"
+            }
+    except Exception as e:
+        print(e)
+        print(f"[ERROR] Could not parse complexity JSON: {e}")
+        return {
+            "summary": "Analysis Failed",
+            "time_complexity": "Analysis Failed",
+            "space_complexity": "Analysis Failed"
+        }
 
 async def collect_test_results(code, timeout=10):
     """
@@ -230,6 +291,14 @@ async def main():
     teams = [teamA, teamB, teamC]
     solutions_log = []
 
+    # Helper to extract summary from team's last code output, if available
+    def extract_summary(team):
+        if hasattr(team, "last_results") and isinstance(team.last_results, list):
+            for r in team.last_results:
+                if isinstance(r, dict) and "summary" in r:
+                    return r["summary"]
+        return ""
+
     # Run all teams independently in parallel (Phase 1 + Phase 2)
     team_outcomes = await asyncio.gather(*(run_team_workflow(t) for t in teams))
 
@@ -242,10 +311,15 @@ async def main():
         for t in solved:
             print(f"\n--- Solution from {getattr(t, 'name', str(t))} ---")
             print(getattr(t, "solved_code", t.current_code))
+            final_code = getattr(t, "solved_code", t.current_code)
+            analysis = await generate_summary_for_code(final_code)
             solutions_log.append({
                 "team": getattr(t, "name", str(t)),
-                "code": getattr(t, "solved_code", t.current_code),
-                "status": "solved"
+                "code": final_code,
+                "status": "solved",
+                "summary": analysis.get("summary"),
+                "time_complexity": analysis.get("time_complexity"),
+                "space_complexity": analysis.get("space_complexity"),
             })
 
         # Best-effort: try to help unsolved teams using the successful teams' code
@@ -278,10 +352,15 @@ Update your code by integrating the necessary logic fixes from the working solut
                 break
             solved.extend(newly_solved)
             for t in newly_solved:
+                final_code = getattr(t, "solved_code", t.current_code)
+                analysis = await generate_summary_for_code( final_code)
                 solutions_log.append({
                     "team": getattr(t, "name", str(t)),
-                    "code": getattr(t, "solved_code", t.current_code),
-                    "status": "solved"
+                    "code": final_code,
+                    "status": "solved",
+                    "summary": analysis.get("summary"),
+                    "time_complexity": analysis.get("time_complexity"),
+                    "space_complexity": analysis.get("space_complexity"),
                 })
 
         # Final behavior: if single solver -> return single; if multiple -> return all.
@@ -291,7 +370,7 @@ Update your code by integrating the necessary logic fixes from the working solut
         else:
             print("\nMultiple successful solutions found; returning all successful solutions.")
         with open("solutions.json", "w") as f:
-            json.dump(solutions_log, f, indent=2)
+            json.dump(solutions_log, f, indent=4)
         return
 
     # No team solved independently -> round-robin cross-pollination attempt
@@ -339,18 +418,33 @@ Update your code by integrating the useful logic from this attempt while keeping
         for t in solved:
             print(f"\n--- Solution from {getattr(t, 'name', str(t))} ---")
             print(getattr(t, "solved_code", t.current_code))
+            final_code = getattr(t, "solved_code", t.current_code)
+            analysis = await generate_summary_for_code( final_code)
             solutions_log.append({
                 "team": getattr(t, "name", str(t)),
-                "code": getattr(t, "solved_code", t.current_code),
-                "status": "solved"
+                "code": final_code,
+                "status": "solved",
+                "summary": analysis.get("summary"),
+                "time_complexity": analysis.get("time_complexity"),
+                "space_complexity": analysis.get("space_complexity"),
             })
     else:
         print("No solutions found after cross-pollination. Returning best-effort latest attempts from each team:")
         for t in teams:
             print(f"\n--- Latest attempt from {getattr(t, 'name', str(t))} ---")
             print(getattr(t, "current_code", "<no code>"))
+            final_code = getattr(t, "current_code", "<no code>")
+            analysis = await generate_summary_for_code( final_code)
+            solutions_log.append({
+                "team": getattr(t, "name", str(t)),
+                "code": final_code,
+                "status": "unsolved",
+                "summary": analysis.get("summary"),
+                "time_complexity": analysis.get("time_complexity"),
+                "space_complexity": analysis.get("space_complexity"),
+            })
     with open("solutions.json", "w") as f:
-        json.dump(solutions_log, f, indent=2)
+        json.dump(solutions_log, f, indent=4)
 
 if __name__ == "__main__":
     import sys
@@ -365,31 +459,28 @@ if __name__ == "__main__":
 
         # Helper to extract summary from team's last code output, if available
         def extract_summary(team):
-            # Try to get summary from last_results, if any result has a 'summary' field
-            # Or from a 'summary' field in a code output JSON, if such exists
-            # But as we don't have code output JSON, fallback to ""
-            # If team.last_results is a list of dicts, look for 'summary' field
             if hasattr(team, "last_results") and isinstance(team.last_results, list):
                 for r in team.last_results:
                     if isinstance(r, dict) and "summary" in r:
                         return r["summary"]
-            # fallback
             return ""
 
         # If any solved, accept those solutions right away (and attempt cross-pollination to help unsolved)
         if solved:
             print(f"Found {len(solved)} solution(s) from independent runs.")
             for t in solved:
-                summary = extract_summary(t)
+                final_code = getattr(t, "solved_code", t.current_code)
+                analysis = await generate_summary_for_code( final_code)
                 print(f"\n--- Solution from {getattr(t, 'name', str(t))} ---")
-                print(getattr(t, "solved_code", t.current_code))
-                if summary:
-                    print(f"Summary: {summary}")
+                print(final_code)
+                print(f"Summary: {analysis.get('summary')}")
                 solutions_log.append({
                     "team": getattr(t, "name", str(t)),
-                    "code": getattr(t, "solved_code", t.current_code),
+                    "code": final_code,
                     "status": "solved",
-                    "summary": summary
+                    "summary": analysis.get("summary"),
+                    "time_complexity": analysis.get("time_complexity"),
+                    "space_complexity": analysis.get("space_complexity"),
                 })
 
             # Best-effort: try to help unsolved teams using the successful teams' code
@@ -415,34 +506,38 @@ if __name__ == "__main__":
                     break
                 solved.extend(newly_solved)
                 for t in newly_solved:
-                    summary = extract_summary(t)
+                    final_code = getattr(t, "solved_code", t.current_code)
+                    analysis = await generate_summary_for_code(final_code)
                     print(f"\n--- Solution from {getattr(t, 'name', str(t))} ---")
-                    print(getattr(t, "solved_code", t.current_code))
-                    if summary:
-                        print(f"Summary: {summary}")
+                    print(final_code)
+                    print(f"Summary: {analysis.get('summary')}")
                     solutions_log.append({
                         "team": getattr(t, "name", str(t)),
-                        "code": getattr(t, "solved_code", t.current_code),
+                        "code": final_code,
                         "status": "solved",
-                        "summary": summary
+                        "summary": analysis.get("summary"),
+                        "time_complexity": analysis.get("time_complexity"),
+                        "space_complexity": analysis.get("space_complexity"),
                     })
 
             # At this point, add any remaining unsolved teams to the log with latest code
             for t in unsolved:
-                summary = extract_summary(t)
+                final_code = getattr(t, "current_code", "<no code>")
+                analysis = await generate_summary_for_code(final_code)
                 print(f"\n--- Latest attempt from {getattr(t, 'name', str(t))} ---")
-                print(getattr(t, "current_code", "<no code>"))
-                if summary:
-                    print(f"Summary: {summary}")
+                print(final_code)
+                print(f"Summary: {analysis.get('summary')}")
                 solutions_log.append({
                     "team": getattr(t, "name", str(t)),
-                    "code": getattr(t, "current_code", "<no code>"),
+                    "code": final_code,
                     "status": "unsolved",
-                    "summary": summary
+                    "summary": analysis.get("summary"),
+                    "time_complexity": analysis.get("time_complexity"),
+                    "space_complexity": analysis.get("space_complexity"),
                 })
 
             with open("solutions.json", "w") as f:
-                json.dump(solutions_log, f, indent=2)
+                json.dump(solutions_log, f, indent=4)
             return
 
         # No team solved independently -> round-robin cross-pollination attempt
@@ -481,22 +576,34 @@ if __name__ == "__main__":
         if solved:
             print(f"After cross-pollination, {len(solved)} solution(s) found.")
             for t in solved:
-                summary = extract_summary(t)
+                final_code = getattr(t, "solved_code", t.current_code)
+                analysis = await generate_summary_for_code( final_code)
                 print(f"\n--- Solution from {getattr(t, 'name', str(t))} ---")
-                print(getattr(t, "solved_code", t.current_code))
-                if summary:
-                    print(f"Summary: {summary}")
+                print(final_code)
+                print(f"Summary: {analysis.get('summary')}")
                 solutions_log.append({
                     "team": getattr(t, "name", str(t)),
-                    "code": getattr(t, "solved_code", t.current_code),
+                    "code": final_code,
                     "status": "solved",
-                    "summary": summary
+                    "summary": analysis.get("summary"),
+                    "time_complexity": analysis.get("time_complexity"),
+                    "space_complexity": analysis.get("space_complexity"),
                 })
         else:
             print("No solutions found after cross-pollination. Returning best-effort latest attempts from each team:")
             for t in teams:
+                final_code = getattr(t, "current_code", "<no code>")
+                analysis = await generate_summary_for_code(final_code)
                 print(f"\n--- Latest attempt from {getattr(t, 'name', str(t))} ---")
-                print(getattr(t, "current_code", "<no code>"))
+                print(final_code)
+                solutions_log.append({
+                    "team": getattr(t, "name", str(t)),
+                    "code": final_code,
+                    "status": "unsolved",
+                    "summary": analysis.get("summary"),
+                    "time_complexity": analysis.get("time_complexity"),
+                    "space_complexity": analysis.get("space_complexity"),
+                })
 
             # --- Rescue Mode: Try a final agent with full context if all teams failed ---
             # Only activate if truly no team solved
@@ -517,11 +624,11 @@ if __name__ == "__main__":
                     "Rescue_Team",
                     Model_Client(model=model1, API_KEY=API_KEY1).getClient(),
                     executor,
-                    language
+                    language,
                 )
                 rescue_prompt = (
                     "All previous team attempts to solve the following problem have failed all test cases. "
-                    "You are the Rescue Team. Please carefully review the problem, the failed test cases, and the code attempts below. Use deep research if needed."
+                    "You are the Rescue Team. Please carefully review the problem focus on each word and each line beacuse it matters every word can change perspective of solving the question., the failed test cases, and the code attempts below. Use deep research if needed."
                     "Use previous attempts only to understand mistakes, do not copy any code directly. Write a fresh solution from scratch.\n"
                     "Write a fresh, correct, and working solution from scratch (do NOT copy the previous code), ensuring it passes all provided test cases.\n\n"
                     "PROBLEM:\n"
@@ -532,69 +639,52 @@ if __name__ == "__main__":
                 rescue_code = await rescue_agent.generate_code(rescue_prompt)
                 rescue_results, rescue_failed_str = await collect_test_results(rescue_code, timeout=20)
                 passed_all = not rescue_failed_str or rescue_failed_str == "[]"
-                rescue_status = "solved" if passed_all else "unsolved"
-                rescue_source = "rescue_mode" if passed_all else "rescue_mode_attempt"
-                print(f"\n--- Rescue Team Attempt ---")
-                print(rescue_code)
-                if passed_all:
-                    print("[Rescue Mode] Rescue Team SOLVED the problem!")
-                else:
-                    print("[Rescue Mode] Rescue Team attempt did NOT solve all test cases.")
-
+                
                 # If failed, allow one refinement retry
-                retry_code = None
-                retry_results = None
-                retry_failed_str = None
-                retry_status = None
                 if not passed_all:
-                    retry_code = await rescue_agent.refine_code_withContext(rescue_code, fail_logs=rescue_failed_str)
-                    retry_results, retry_failed_str = await collect_test_results(retry_code, timeout=20)
-                    retry_passed_all = not retry_failed_str or retry_failed_str == "[]"
-                    retry_status = "solved" if retry_passed_all else "unsolved"
-                    retry_source = "rescue_mode_refinement" if retry_passed_all else "rescue_mode_final"
-                    print(f"\n--- Rescue Team Refinement Attempt ---")
-                    print(retry_code)
-                    if retry_passed_all:
-                        print("[Rescue Mode] Rescue Team SOLVED the problem on refinement!")
-                    else:
-                        print("[Rescue Mode] Rescue Team refinement attempt did NOT solve all test cases.")
-                    solutions_log.append({
-                        "team": "Rescue_Team",
-                        "code": retry_code,
-                        "status": retry_status,
-                        "source": retry_source,
-                        "test_results": retry_results,
-                        "reason": "All teams failed after cross-pollination",
-                        "context_length_used": len(rescue_prompt)
-                    })
-                else:
-                    solutions_log.append({
-                        "team": "Rescue_Team",
-                        "code": rescue_code,
-                        "status": rescue_status,
-                        "source": rescue_source,
-                        "test_results": rescue_results,
-                        "reason": "All teams failed after cross-pollination",
-                        "context_length_used": len(rescue_prompt)
-                    })
+                    print("[Rescue Mode] Initial attempt failed, refining...")
+                    rescue_code = await rescue_agent.refine_code_withContext(rescue_code, fail_logs=rescue_failed_str)
+                    rescue_results, rescue_failed_str = await collect_test_results(rescue_code, timeout=20)
+                    passed_all = not rescue_failed_str or rescue_failed_str == "[]"
+
+                rescue_status = "solved" if passed_all else "unsolved"
+                print(f"\n--- Rescue Team Attempt (Status: {rescue_status}) ---")
+                print(rescue_code)
+                
+                analysis = await generate_summary_for_code(rescue_code)
+                solutions_log.append({
+                    "team": "Rescue_Team",
+                    "code": rescue_code,
+                    "status": rescue_status,
+                    "summary": analysis.get("summary"),
+                    "time_complexity": analysis.get("time_complexity"),
+                    "space_complexity": analysis.get("space_complexity"),
+                    "source": "rescue_mode"
+                })
 
         # At this point, add all teams' latest attempts to the log (including unsolved)
         already_logged = {entry["team"] for entry in solutions_log}
         for t in teams:
-            if getattr(t, "solved", False) and getattr(t, "name", str(t)) in already_logged:
-                continue  # already logged above
-            summary = extract_summary(t)
-            print(f"\n--- Latest attempt from {getattr(t, 'name', str(t))} ---")
-            print(getattr(t, "current_code", "<no code>"))
-            if summary:
-                print(f"Summary: {summary}")
+            team_name = getattr(t, "name", str(t))
+            if team_name in already_logged:
+                continue
+            
+            is_solved = getattr(t, "solved", False)
+            status = "solved" if is_solved else "unsolved"
+            final_code = getattr(t, "solved_code") if is_solved else getattr(t, "current_code", "<no code>")
+            
+            analysis = await generate_summary_for_code(final_code)
+            print(f"\n--- Logging final state for {team_name} ---")
+            
             solutions_log.append({
-                "team": getattr(t, "name", str(t)),
-                "code": getattr(t, "solved_code", t.current_code) if getattr(t, "solved", False) else getattr(t, "current_code", "<no code>"),
-                "status": "solved" if getattr(t, "solved", False) else "unsolved",
-                "summary": summary
+                "team": team_name,
+                "code": final_code,
+                "status": status,
+                "summary": analysis.get("summary"),
+                "time_complexity": analysis.get("time_complexity"),
+                "space_complexity": analysis.get("space_complexity"),
             })
         with open("solutions.json", "w") as f:
-            json.dump(solutions_log, f, indent=2)
+            json.dump(solutions_log, f, indent=4)
 
     asyncio.run(_main_and_log_all())

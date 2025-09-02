@@ -1,208 +1,26 @@
 [
-  {
-    "team": "Rescue_Team",
-    "code": "import java.util.*;\n\nclass Solution {\n    public int maximumActivationValue(int[] value, int[] limit) {\n        int n = value.length;\n        int[][] pairs = new int[n][2];\n        for (int i = 0; i < n; i++) {\n            pairs[i] = new int[]{value[i], limit[i]};\n        }\n\n        Arrays.sort(pairs, (a, b) -> {\n            double ratioA = (double) a[0] / a[1];\n            double ratioB = (double) b[0] / b[1];\n            if (ratioA > ratioB) return -1;\n            if (ratioA < ratioB) return 1;\n            return 0;\n        });\n\n        int activeCount = 0;\n        int totalValue = 0;\n        boolean[] active = new boolean[n];\n\n        for (int i = 0; i < n; i++) {\n            int val = pairs[i][0];\n            int lim = pairs[i][1];\n            if (!active[i] && activeCount < lim) {\n                active[i] = true;\n                totalValue += val;\n                activeCount++;\n                //Critical fix:  Iterate through *all* elements, and\n                //deactivate if appropriate.  This is critical for the\n                //cases where the ratio ties.\n                for (int j = 0; j < n; j++) {\n                  if(active[j] && limit[j] <= activeCount)\n                  {\n                      active[j] = false;\n                      activeCount--;\n                  }\n                }\n            }\n        }\n\n        return totalValue;\n    }\n}",
-    "status": "unsolved",
-    "source": "rescue_mode_final",
-    "test_results": [
-      {
-        "input": {
-          "value": [
-            3,
-            5,
-            8
-          ],
-          "limit": [
-            2,
-            1,
-            3
-          ]
-        },
-        "output": "16",
-        "expected": 16,
-        "passed": true
-      },
-      {
-        "input": {
-          "value": [
-            4,
-            2,
-            6
-          ],
-          "limit": [
-            1,
-            1,
-            1
-          ]
-        },
-        "output": "12",
-        "expected": 6,
-        "passed": false
-      },
-      {
-        "input": {
-          "value": [
-            4,
-            1,
-            5,
-            2
-          ],
-          "limit": [
-            3,
-            3,
-            2,
-            3
-          ]
-        },
-        "output": "12",
-        "expected": 12,
-        "passed": true
-      },
-      {
-        "input": {
-          "value": [
-            10
-          ],
-          "limit": [
-            1
-          ]
-        },
-        "output": "10",
-        "expected": 10,
-        "passed": true
-      },
-      {
-        "input": {
-          "value": [
-            1,
-            2
-          ],
-          "limit": [
-            1,
-            2
-          ]
-        },
-        "output": "3",
-        "expected": 3,
-        "passed": true
-      },
-      {
-        "input": {
-          "value": [
-            5,
-            10,
-            15,
-            20
-          ],
-          "limit": [
-            4,
-            4,
-            4,
-            4
-          ]
-        },
-        "output": "50",
-        "expected": 50,
-        "passed": true
-      },
-      {
-        "input": {
-          "value": [
-            100000,
-            1,
-            1,
-            1
-          ],
-          "limit": [
-            1,
-            2,
-            3,
-            4
-          ]
-        },
-        "output": "100003",
-        "expected": 100003,
-        "passed": true
-      },
-      {
-        "input": {
-          "value": [
-            1,
-            1,
-            1,
-            100000
-          ],
-          "limit": [
-            4,
-            4,
-            4,
-            1
-          ]
-        },
-        "output": "100003",
-        "expected": 100003,
-        "passed": true
-      },
-      {
-        "input": {
-          "value": [
-            7,
-            8,
-            9,
-            1,
-            2
-          ],
-          "limit": [
-            3,
-            1,
-            4,
-            2,
-            5
-          ]
-        },
-        "output": "26",
-        "expected": 27,
-        "passed": false
-      },
-      {
-        "input": {
-          "value": [
-            10,
-            5,
-            8,
-            7
-          ],
-          "limit": [
-            2,
-            2,
-            2,
-            2
-          ]
-        },
-        "output": "30",
-        "expected": 18,
-        "passed": false
-      }
-    ],
-    "reason": "All teams failed after cross-pollination",
-    "context_length_used": 22031
-  },
-  {
-    "team": "A_Team",
-    "code": "import java.util.*;\n\nclass Solution {\n    public int maxActivationValue(int[] value, int[] limit) {\n        int n = value.length;\n        int[][] pairs = new int[n][2];\n        for (int i = 0; i < n; i++) {\n            pairs[i] = new int[]{value[i], limit[i]};\n        }\n\n        Arrays.sort(pairs, (a, b) -> (int) (((double) b[0] / b[1]) - ((double) a[0] / a[1]) > 0 ? 1 : -1));\n\n        int activeCount = 0;\n        int totalValue = 0;\n        boolean[] active = new boolean[n];\n\n        for (int i = 0; i < n; i++) {\n            int val = pairs[i][0];\n            int lim = pairs[i][1];\n            if (!active[i] && activeCount < lim) {\n                active[i] = true;\n                totalValue += val;\n                activeCount++;\n                for (int j = 0; j < n; j++) {\n                    if (active[j] && limit[j] <= activeCount) {\n                        active[j] = false;\n                        activeCount--;\n                    }\n                }\n            }\n        }\n\n        return totalValue;\n    }\n\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        int n = scanner.nextInt();\n        int[] value = new int[n];\n        int[] limit = new int[n];\n        for (int i = 0; i < n; i++) {\n            value[i] = scanner.nextInt();\n        }\n        for (int i = 0; i < n; i++) {\n            limit[i] = scanner.nextInt();\n        }\n        scanner.close();\n\n        Solution sol = new Solution(); \n        int result = sol.maxActivationValue(value, limit);\n        System.out.println(result);\n    }\n}",
-    "status": "unsolved",
-    "summary": ""
-  },
-  {
-    "team": "B_Team",
-    "code": "import java.util.Arrays;\nimport java.util.Comparator;\nimport java.util.Scanner;\n\nclass Solution {\n    public int maxActivationValue(int[] value, int[] limit) {\n        int n = value.length;\n        int[][] pairs = new int[n][2];\n        for (int i = 0; i < n; i++) {\n            pairs[i] = new int[]{value[i], limit[i]};\n        }\n\n        Arrays.sort(pairs, (a, b) -> (int) (((double) b[0] / b[1]) - ((double) a[0] / a[1]) > 0 ? 1 : -1));\n\n        int activeCount = 0;\n        int totalValue = 0;\n        boolean[] active = new boolean[n];\n\n        for (int i = 0; i < n; i++) {\n            int val = pairs[i][0];\n            int lim = pairs[i][1];\n            if (!active[i] && activeCount < lim) {\n                active[i] = true;\n                totalValue += val;\n                activeCount++;\n                for (int j = 0; j < n; j++) {\n                    if (active[j] && limit[j] <= activeCount) {\n                        active[j] = false;\n                        activeCount--;\n                    }\n                }\n            }\n        }\n\n        return totalValue;\n    }\n\n    public static void main(String[] args) {\n        Scanner scanner = new Scanner(System.in);\n        int n = scanner.nextInt();\n        int[] value = new int[n];\n        int[] limit = new int[n];\n        for (int i = 0; i < n; i++) {\n            value[i] = scanner.nextInt();\n        }\n        for (int i = 0; i < n; i++) {\n            limit[i] = scanner.nextInt();\n        }\n        scanner.close();\n\n        Solution sol = new Solution(); \n        int result = sol.maxActivationValue(value, limit);\n        System.out.println(result);\n    }\n}",
-    "status": "unsolved",
-    "summary": ""
-  },
-  {
-    "team": "C_Team",
-    "code": "import java.util.*;\n\nclass Solution {\n    public int maxActivationValue(int[] value, int[] limit) {\n        int n = value.length;\n        int[][] pairs = new int[n][2];\n        for (int i = 0; i < n; i++) {\n            pairs[i] = new int[]{value[i], limit[i]};\n        }\n\n        Arrays.sort(pairs, (a, b) -> (int) (((double) b[0] / b[1]) - ((double) a[0] / a[1]) > 0 ? 1 : -1));\n\n        int activeCount = 0;\n        int totalValue = 0;\n        boolean[] active = new boolean[n];\n\n        for (int i = 0; i < n; i++) {\n            int val = pairs[i][0];\n            int lim = pairs[i][1];\n            if (!active[i] && activeCount < lim) {\n                active[i] = true;\n                totalValue += val;\n                activeCount++;\n                for (int j = 0; j < n; j++) {\n                    if (active[j] && limit[j] <= activeCount) {\n                        active[j] = false;\n                        activeCount--;\n                    }\n                }\n            }\n        }\n\n        return totalValue;\n    }\n}",
-    "status": "unsolved",
-    "summary": ""
-  }
+    {
+        "team": "A_Team",
+        "code": "import java.util.HashMap;\nimport java.util.Map;\n\nclass Solution {\n    public int[] twoSum(int[] nums, int target) {\n        Map<Integer, Integer> numMap = new HashMap<>();\n        for (int i = 0; i < nums.length; i++) {\n            int complement = target - nums[i];\n            if (numMap.containsKey(complement)) {\n                return new int[] { numMap.get(complement), i };\n            }\n            numMap.put(nums[i], i);\n        }\n        return new int[] {}; // Should not happen as per the problem statement\n    }\n}",
+        "status": "solved",
+        "summary": "Uses a HashMap to store each number and its index. For each number, it checks if the complement (target - number) exists in the map. If it does, it returns the indices of the number and its complement.",
+        "time_complexity": "O(n)",
+        "space_complexity": "O(n)"
+    },
+    {
+        "team": "B_Team",
+        "code": "import java.util.HashMap;\nimport java.util.Map;\n\nclass Solution {\n    public int[] twoSum(int[] nums, int target) {\n        Map<Integer, Integer> numMap = new HashMap<>();\n        for (int i = 0; i < nums.length; i++) {\n            int complement = target - nums[i];\n            if (numMap.containsKey(complement)) {\n                return new int[] {numMap.get(complement), i};\n            }\n            numMap.put(nums[i], i);\n        }\n        return new int[] {}; // Should never happen, given the problem constraints\n    }\n}",
+        "status": "solved",
+        "summary": "This code uses a HashMap to find two numbers in an array that add up to a target value. It iterates through the array, storing each number and its index in the map. For each number, it checks if the complement exists in the map, and if so, returns the indices.",
+        "time_complexity": "O(n)",
+        "space_complexity": "O(n)"
+    },
+    {
+        "team": "C_Team",
+        "code": "import java.util.HashMap;\nimport java.util.Map;\n\nclass Solution {\n    public int[] twoSum(int[] nums, int target) {\n        Map<Integer, Integer> numMap = new HashMap<>();\n        for (int i = 0; i < nums.length; i++) {\n            int complement = target - nums[i];\n            if (numMap.containsKey(complement)) {\n                return new int[] {numMap.get(complement), i };\n            }\n            numMap.put(nums[i], i);\n        }\n        return new int[] {}; // Should never happen as problem guarantees a solution\n    }\n}",
+        "status": "solved",
+        "summary": "The algorithm utilizes a HashMap to store each number's value and index. It iterates through the array, and for each number, it checks if its complement (target - number) exists in the HashMap. If found, it returns the indices of the two numbers.",
+        "time_complexity": "O(n)",
+        "space_complexity": "O(n)"
+    }
 ]

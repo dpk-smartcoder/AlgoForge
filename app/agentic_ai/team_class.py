@@ -108,11 +108,26 @@ class AlgoForgeAgent:
         return executable_code
 
     async def run_tests(self, code: str, test_cases: List[Dict]) -> Dict:
-        import json
-        result = await self.executor.run_code(code, test_cases)
+        """
+        Runs code against test cases and collects all results.
+        NOTE: This is now compatible with the async generator in the executor.
+        """
+        all_results = []
+        # The executor's run_code is now an async generator, so we iterate through it.
+        async for result in self.executor.run_code(code, test_cases):
+            all_results.append(result)
+
+        # Store the full list of results.
         if self.history:
-            self.history[-1]["result"] = result
-        return result
+            self.history[-1]["result"] = all_results
+        
+        # For compatibility, you might summarize the result, e.g., by checking if all passed.
+        all_passed = all(r.get("passed", False) for r in all_results)
+        summary = {
+            "all_passed": all_passed,
+            "results": all_results
+        }
+        return summary
 
     async def refine_code_withoutCotext(self, problem_prompt: str, last_code: str) -> str:
         """Re-prompt LLM with previous code."""
@@ -133,3 +148,4 @@ class AlgoForgeAgent:
             + os.getenv('Last_prompt')
         )
         return await self.generate_code(refine_prompt)
+

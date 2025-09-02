@@ -1,1 +1,9 @@
 agent-venv
+solution.json
+data.json
+.env
+node_modules
+server.js
+solutions.json
+data.json
+random.json
