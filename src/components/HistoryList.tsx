@@ -50,17 +50,17 @@ const ConfirmationModal: React.FC<{
 
 // --- Skeleton Loader Component ---
 const SkeletonCard: React.FC = () => (
-  <div className="bg-white dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-800 rounded-xl p-4 animate-pulse">
-    <div className="flex items-center justify-between mb-4">
-      <div className="h-4 bg-neutral-200 dark:bg-neutral-700 rounded w-1/4"></div>
-      <div className="h-3 bg-neutral-200 dark:bg-neutral-700 rounded w-1/6"></div>
+    <div className="bg-white dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-800 rounded-xl p-4 animate-pulse">
+      <div className="flex items-center justify-between mb-4">
+        <div className="h-4 bg-neutral-200 dark:bg-neutral-700 rounded w-1/4"></div>
+        <div className="h-3 bg-neutral-200 dark:bg-neutral-700 rounded w-1/6"></div>
+      </div>
+      <div className="h-5 bg-neutral-200 dark:bg-neutral-700 rounded w-3/4 mb-3"></div>
+      <div className="h-4 bg-neutral-200 dark:bg-neutral-700 rounded w-full mb-4"></div>
+      <div className="h-10 bg-neutral-200 dark:bg-neutral-700 rounded-lg w-full"></div>
     </div>
-    <div className="h-5 bg-neutral-200 dark:bg-neutral-700 rounded w-3/4 mb-3"></div>
-    <div className="h-4 bg-neutral-200 dark:bg-neutral-700 rounded w-full mb-4"></div>
-    <div className="h-10 bg-neutral-200 dark:bg-neutral-700 rounded-lg w-full"></div>
-  </div>
 );
-
+  
 export const HistoryList: React.FC = () => {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   
@@ -131,6 +131,7 @@ export const HistoryList: React.FC = () => {
   return (
     <>
       <div className="space-y-6 max-w-3xl mx-auto">
+        {/* --- FIX: ADDED THIS SECTION BACK --- */}
         <div className="flex justify-end">
           <button
             onClick={() => setIsConfirmModalOpen(true)}
@@ -141,8 +142,8 @@ export const HistoryList: React.FC = () => {
             Clear History
           </button>
         </div>
+        {/* --- END OF FIX --- */}
 
-        {/* --- FIX: Restored the full code for the list item card --- */}
         {items.map((item, index) => (
           <div 
             key={item._id} 
