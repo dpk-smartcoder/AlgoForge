@@ -64,7 +64,7 @@ const SkeletonCard: React.FC = () => (
 export const HistoryList: React.FC = () => {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   
-  const { items, loading, error, refreshHistory, isUsingMock, clearMockData } = useHistoryData();
+  const { items, loading, error, refreshHistory, deleteAll } = useHistoryData();
   const navigate = useNavigate();
 
   const getStatusIcon = (status: string) => {
@@ -89,8 +89,8 @@ export const HistoryList: React.FC = () => {
     navigate(`/problem/${problemId}`);
   };
 
-  const handleConfirmReset = () => {
-    clearMockData();
+  const handleConfirmReset = async () => {
+    await deleteAll();
     setIsConfirmModalOpen(false);
   };
   
@@ -118,7 +118,7 @@ export const HistoryList: React.FC = () => {
     );
   }
 
-  if (!items.length && !isUsingMock) { // Hide if using mock and there are no items, so the reset button shows.
+  if (!items.length) {
     return (
       <div className="text-center py-16 max-w-md mx-auto">
         <FiDatabase className="mx-auto text-neutral-400 dark:text-neutral-600 mb-3" size={32} />
@@ -131,22 +131,16 @@ export const HistoryList: React.FC = () => {
   return (
     <>
       <div className="space-y-6 max-w-3xl mx-auto">
-        {isUsingMock && (
-          <div className="bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl p-4 mb-4 flex items-center justify-between animate-fadeInUp">
-            <div>
-              <h4 className="font-semibold text-neutral-800 dark:text-neutral-200">Manage History</h4>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">This is simulated data for demonstration.</p>
-            </div>
-            <button
-              onClick={() => setIsConfirmModalOpen(true)}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500 text-white transition-colors duration-300 ease-in-out hover:bg-red-600 active:scale-95 text-sm font-medium"
-              title="Reset all mock data"
-            >
-              <FiTrash2 size={14} />
-              Reset History
-            </button>
-          </div>
-        )}
+        <div className="flex justify-end">
+          <button
+            onClick={() => setIsConfirmModalOpen(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500 text-white transition-colors duration-300 ease-in-out hover:bg-red-600 active:scale-95 text-sm font-medium"
+            title="Delete all history"
+          >
+            <FiTrash2 size={14} />
+            Clear History
+          </button>
+        </div>
 
         {/* --- FIX: Restored the full code for the list item card --- */}
         {items.map((item, index) => (

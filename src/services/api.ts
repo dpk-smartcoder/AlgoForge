@@ -41,6 +41,7 @@ export const apiEndpoints = {
   // History management
   getHistory: '/history',
   getHistoryItem: (id: string) => `/history/${id}`,
+  deleteHistory: '/history',
   
   // User management
   getUserProfile: '/users/profile',
@@ -112,6 +113,12 @@ export const apiService = {
   // Get specific history item
   async getHistoryItem(id: string): Promise<HistoryItem> {
     const response = await api.get(apiEndpoints.getHistoryItem(id));
+    return response.data;
+  },
+
+  // Delete all history entries for current user
+  async deleteHistory(): Promise<BackendResponse> {
+    const response = await api.delete(apiEndpoints.deleteHistory);
     return response.data;
   },
 

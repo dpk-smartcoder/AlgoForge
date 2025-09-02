@@ -39,4 +39,9 @@ export const googleProvider = new GoogleAuthProvider();
 export const storage = getStorage(app);
 export const firebaseConfigured = missing.length === 0;
 
+// Expose auth for debugging in browser console (e.g., __auth.currentUser.getIdToken(true))
+// This has no effect in production builds unless accessed intentionally.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(window as any).__auth = auth;
+
 

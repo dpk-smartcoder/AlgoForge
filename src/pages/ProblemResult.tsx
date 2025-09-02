@@ -8,7 +8,7 @@ import { HistoryItem } from '../services/api';
 export const ProblemResult: React.FC = () => {
   const { problemId } = useParams<{ problemId: string }>();
   const navigate = useNavigate();
-  const { getItemById, refreshHistory, isUsingMock } = useHistoryData();
+  const { getItemById, refreshHistory } = useHistoryData();
   const { user } = useAuth();
   const [problem, setProblem] = useState<HistoryItem | null>(null);
   const [loading, setLoading] = useState(true);
@@ -146,11 +146,7 @@ export const ProblemResult: React.FC = () => {
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(problem.status)}`}>
                 {problem.status}
               </span>
-              {isUsingMock && problem._id.startsWith('mock_') && (
-                <span className="text-xs text-neutral-400 bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded">
-                  Mock Data
-                </span>
-              )}
+              
             </div>
           </div>
         </div>

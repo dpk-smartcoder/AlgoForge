@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { apiService, HistoryItem, ProblemSubmission } from '../services/api';
-import { mockApiService } from '../services/mockApi';
 import { useAuth } from './AuthProvider';
 
 type HistoryContextValue = {
@@ -11,17 +10,13 @@ type HistoryContextValue = {
   refreshHistory: () => Promise<void>;
   getItemById: (id: string) => HistoryItem | undefined;
   isUsingMock: boolean;
-  clearMockData: () => void;
-  getMockStats: () => { totalProblems: number; solvedProblems: number; pendingProblems: number };
+  deleteAll: () => Promise<void>;
 };
 
 const HistoryContext = createContext<HistoryContextValue | undefined>(undefined);
 
-// Check if we should use mock API (when backend is not available)
-const shouldUseMock = () => {
-  const apiBase = process.env.REACT_APP_API_BASE;
-  return !apiBase || apiBase === 'http://localhost:8000'; // Use mock if no backend or localhost
-};
+// Always use real API; no mock fallback
+const shouldUseMock = () => false;
 
 export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<HistoryItem[]>([]);
@@ -30,16 +25,10 @@ export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isUsingMock, setIsUsingMock] = useState<boolean>(false);
   const { user } = useAuth();
 
-  // Determine if we should use mock API
+  // Force real API
   useEffect(() => {
-    const useMock = shouldUseMock();
-    setIsUsingMock(useMock);
-    
-    if (useMock) {
-      console.log('🔧 Using Mock API - Backend not available');
-    } else {
-      console.log('🚀 Using Real API - Backend available');
-    }
+    setIsUsingMock(false);
+    console.log('🚀 Using Real API - Backend available');
   }, []);
 
   const refreshHistory = useCallback(async () => {
@@ -48,13 +37,7 @@ export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setLoading(true);
     setError(null);
     try {
-      let historyData: HistoryItem[];
-      
-      if (isUsingMock) {
-        historyData = await mockApiService.getHistory();
-      } else {
-        historyData = await apiService.getHistory();
-      }
+      const historyData: HistoryItem[] = await apiService.getHistory();
       setItems(historyData);
     } catch (err) {
       console.error('Failed to fetch history:', err);
@@ -83,13 +66,7 @@ export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setError(null);
     
     try {
-      let response;
-      
-      if (isUsingMock) {
-        response = await mockApiService.submitProblem(item);
-      } else {
-        response = await apiService.submitProblem(item);
-      }
+      const response = await apiService.submitProblem(item);
       
       if (response.success && response.data) {
         // Add the new item to local state
@@ -108,12 +85,7 @@ export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         
         setItems(prev => [newItem, ...prev]);
         
-        // If using mock, refresh after solution generation
-        if (isUsingMock) {
-          setTimeout(() => {
-            refreshHistory(); // Refresh to get updated status/solution
-          }, 4000); // Wait for mock solution generation
-        }
+        // Optionally poll or let user refresh; backend updates will be reflected on refreshHistory
       } else {
         throw new Error(response.message || 'Failed to submit problem');
       }
@@ -130,19 +102,7 @@ export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return items.find(item => item._id === id);
   }, [items]);
 
-  const clearMockData = useCallback(() => {
-    if (isUsingMock) {
-      mockApiService.clearMockData();
-      setItems([]);
-    }
-  }, [isUsingMock]);
-
-  const getMockStats = useCallback(() => {
-    if (isUsingMock) {
-      return mockApiService.getMockDataStats();
-    }
-    return { totalProblems: 0, solvedProblems: 0, pendingProblems: 0 };
-  }, [isUsingMock]);
+  const clearMockData = useCallback(() => {}, []);
 
   const value = useMemo<HistoryContextValue>(() => ({
     items,
@@ -152,9 +112,19 @@ export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     refreshHistory,
     getItemById,
     isUsingMock,
-    clearMockData,
-    getMockStats,
-  }), [items, addItem, loading, error, refreshHistory, getItemById, isUsingMock, clearMockData, getMockStats]);
+    deleteAll: async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        await apiService.deleteHistory();
+        setItems([]);
+      } catch (e) {
+        setError('Failed to delete history');
+      } finally {
+        setLoading(false);
+      }
+    },
+  }), [items, addItem, loading, error, refreshHistory, getItemById, isUsingMock]);
 
   return <HistoryContext.Provider value={value}>{children}</HistoryContext.Provider>;
 };
