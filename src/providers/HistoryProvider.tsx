@@ -15,9 +15,6 @@ type HistoryContextValue = {
 
 const HistoryContext = createContext<HistoryContextValue | undefined>(undefined);
 
-// Always use real API; no mock fallback
-const shouldUseMock = () => false;
-
 export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -25,10 +22,8 @@ export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isUsingMock, setIsUsingMock] = useState<boolean>(false);
   const { user } = useAuth();
 
-  // Force real API
   useEffect(() => {
     setIsUsingMock(false);
-    console.log('🚀 Using Real API - Backend available');
   }, []);
 
   const refreshHistory = useCallback(async () => {
@@ -46,9 +41,8 @@ export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } finally {
       setLoading(false);
     }
-  }, [user, isUsingMock]);
+  }, [user]);
 
-  // Load history when user logs in
   useEffect(() => {
     if (user) {
       refreshHistory();
@@ -57,26 +51,55 @@ export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [user, refreshHistory]);
 
+  // --- ADDED: Polling function to check for updates ---
+  const pollForItemStatus = useCallback((itemId: string) => {
+    const pollInterval = 5000; // Check every 5 seconds
+    const maxDuration = 120000; // Stop polling after 2 minutes
+    let intervalId: NodeJS.Timeout;
+
+    const startTime = Date.now();
+
+    intervalId = setInterval(async () => {
+      // Safety check: stop if polling for too long
+      if (Date.now() - startTime > maxDuration) {
+        clearInterval(intervalId);
+        console.warn(`Polling for item ${itemId} timed out.`);
+        return;
+      }
+
+      try {
+        const updatedItem = await apiService.getHistoryItem(itemId);
+        // If the status is no longer 'pending', update the state and stop polling
+        if (updatedItem.status !== 'pending') {
+          clearInterval(intervalId);
+          setItems(currentItems =>
+            currentItems.map(item =>
+              item._id === itemId ? updatedItem : item
+            )
+          );
+        }
+      } catch (err) {
+        console.error(`Polling failed for item ${itemId}:`, err);
+        clearInterval(intervalId); // Stop polling on error
+      }
+    }, pollInterval);
+  }, []); // useCallback with empty dependency array as it's self-contained
+
   const addItem = useCallback(async (item: Omit<ProblemSubmission, 'userId'>) => {
     if (!user) {
       throw new Error('User must be logged in to submit problems');
     }
-
-    setLoading(true);
-    setError(null);
     
     try {
       const response = await apiService.submitProblem(item);
       
-      if (response.success && response.data) {
-        // Add the new item to local state
+      if (response.success && response.data?._id) {
+        // Optimistically add the new item in 'pending' state
         const newItem: HistoryItem = {
-          _id: response.data._id || Date.now().toString(),
+          _id: response.data._id,
           userId: user.uid,
           title: item.title,
           problemText: item.problemText,
-          constraints: item.constraints,
-          testCases: item.testCases,
           imageUrl: item.imageUrl,
           status: 'pending',
           createdAt: new Date().toISOString(),
@@ -85,24 +108,22 @@ export const HistoryProvider: React.FC<{ children: React.ReactNode }> = ({ child
         
         setItems(prev => [newItem, ...prev]);
         
-        // Optionally poll or let user refresh; backend updates will be reflected on refreshHistory
+        // --- MODIFIED: Start polling for the final result ---
+        pollForItemStatus(newItem._id);
+
       } else {
         throw new Error(response.message || 'Failed to submit problem');
       }
     } catch (err) {
       console.error('Failed to submit problem:', err);
       setError(err instanceof Error ? err.message : 'Failed to submit problem');
-      throw err;
-    } finally {
-      setLoading(false);
+      throw err; // Re-throw to be caught by the form
     }
-  }, [user, isUsingMock, refreshHistory]);
+  }, [user, pollForItemStatus]);
 
   const getItemById = useCallback((id: string): HistoryItem | undefined => {
     return items.find(item => item._id === id);
   }, [items]);
-
-  const clearMockData = useCallback(() => {}, []);
 
   const value = useMemo<HistoryContextValue>(() => ({
     items,
@@ -134,5 +155,3 @@ export const useHistoryData = (): HistoryContextValue => {
   if (!ctx) throw new Error('useHistoryData must be used within HistoryProvider');
   return ctx;
 };
-
-

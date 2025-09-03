@@ -55,9 +55,9 @@ const SkeletonCard: React.FC = () => (
         <div className="h-4 bg-neutral-200 dark:bg-neutral-700 rounded w-1/4"></div>
         <div className="h-3 bg-neutral-200 dark:bg-neutral-700 rounded w-1/6"></div>
       </div>
-      <div className="h-5 bg-neutral-200 dark:bg-neutral-700 rounded w-3/4 mb-3"></div>
-      <div className="h-4 bg-neutral-200 dark:bg-neutral-700 rounded w-full mb-4"></div>
-      <div className="h-10 bg-neutral-200 dark:bg-neutral-700 rounded-lg w-full"></div>
+      <div className="h-5 bg-neutral-200 dark:bg-neutral-700 rounded w-3/4 max-w-lg mb-3"></div>
+      <div className="h-4 bg-neutral-200 dark:bg-neutral-700 rounded w-full max-w-xl mb-4"></div>
+      <div className="h-10 bg-neutral-200 dark:bg-neutral-700 rounded-lg w-full max-w-lg"></div>
     </div>
 );
   
@@ -67,16 +67,17 @@ export const HistoryList: React.FC = () => {
   const { items, loading, error, refreshHistory, deleteAll } = useHistoryData();
   const navigate = useNavigate();
 
+  // --- MODIFIED: Increased icon size from 20 to 24 for better visual balance ---
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'solved':
-        return <FiCheckCircle className="text-green-500" size={20} />;
+        return <FiCheckCircle className="text-green-500" size={24} />;
       case 'failed':
-        return <FiXCircle className="text-red-500" size={20} />;
+        return <FiXCircle className="text-red-500" size={24} />;
       case 'pending':
-        return <FiLoader className="text-blue-500 animate-spin" size={20} />;
+        return <FiLoader className="text-blue-500 animate-spin" size={24} />;
       default:
-        return <FiClock className="text-neutral-500" size={20} />;
+        return <FiClock className="text-neutral-500" size={24} />;
     }
   };
   
@@ -130,8 +131,26 @@ export const HistoryList: React.FC = () => {
 
   return (
     <>
-      <div className="space-y-6 max-w-3xl mx-auto">
-        {/* --- FIX: ADDED THIS SECTION BACK --- */}
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #f1f1f1;
+        }
+        .dark .custom-scrollbar::-webkit-scrollbar-track {
+          background: #262626;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background-color: #a3a3a3; /* neutral-400 */
+          border-radius: 10px;
+        }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+          background-color: #737373; /* neutral-500 */
+        }
+      `}</style>
+      <div className="space-y-6 max-w-3xl mx-auto custom-scrollbar">
         <div className="flex justify-end">
           <button
             onClick={() => setIsConfirmModalOpen(true)}
@@ -142,22 +161,21 @@ export const HistoryList: React.FC = () => {
             Clear History
           </button>
         </div>
-        {/* --- END OF FIX --- */}
 
         {items.map((item, index) => (
           <div 
             key={item._id} 
-            className="bg-white dark:bg-neutral-800/50 border border-neutral-200/80 dark:border-neutral-800 rounded-xl overflow-hidden transition-all duration-300 hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-700 hover:scale-[1.02] animate-fadeInUp"
+            className="bg-white dark:bg-neutral-800/50 border border-neutral-200/70 dark:border-neutral-700/50 rounded-xl overflow-hidden transition-all duration-300 hover:shadow-xl hover:border-blue-400 dark:hover:border-blue-500 hover:scale-[1.02] animate-fadeInUp"
             style={{ animationDelay: `${index * 100}ms`, animationFillMode: 'backwards' }}
             onClick={() => viewProblemDetails(item._id)}
             role="button"
             tabIndex={0}
           >
-            <div className="p-5">
-              <div className="flex items-start justify-between mb-3">
+            <div className="p-5 border-b border-neutral-200 dark:border-neutral-700">
+              <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   {getStatusIcon(item.status)}
-                  <h3 className="font-semibold text-lg text-neutral-800 dark:text-neutral-100 line-clamp-1">
+                  <h3 className="font-semibold text-xl text-neutral-800 dark:text-neutral-100 line-clamp-1">
                     {item.title}
                   </h3>
                 </div>
@@ -165,13 +183,16 @@ export const HistoryList: React.FC = () => {
                   {formatDate(item.createdAt)}
                 </span>
               </div>
+            </div>
+
+            <div className="p-5">
               {item.problemText && (
                 <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-4 line-clamp-2">
                   {item.problemText}
                 </p>
               )}
               {item.solution && (
-                <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800 text-xs">
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-neutral-200 dark:border-neutral-700 text-xs">
                   <div className="flex justify-between items-center text-blue-800 dark:text-blue-200 font-medium">
                     <span>Solution Snapshot</span>
                     <div className="flex items-center gap-3">
@@ -182,8 +203,9 @@ export const HistoryList: React.FC = () => {
                 </div>
               )}
             </div>
-            <div className="bg-neutral-50 dark:bg-neutral-800 px-5 py-3 border-t border-neutral-200/80 dark:border-neutral-800">
-               <div className="text-sm font-medium text-blue-600 dark:text-blue-400 flex items-center gap-2">
+            
+            <div className="bg-neutral-50 dark:bg-neutral-800 px-5 py-3 border-t border-neutral-200 dark:border-neutral-700">
+              <div className="text-sm font-medium text-blue-600 dark:text-blue-400 flex items-center gap-2">
                 View Analysis <FiExternalLink size={14} />
               </div>
             </div>

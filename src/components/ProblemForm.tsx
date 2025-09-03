@@ -3,7 +3,6 @@ import { useHistoryData } from '../providers/HistoryProvider';
 import { useAuth } from '../providers/AuthProvider';
 import { storage, firebaseConfigured } from '../lib/firebase';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-// CORRECTED: Removed unused FiSend icon
 import { FiCheck, FiAlertCircle, FiLoader, FiX, FiPlus, FiArrowUp } from 'react-icons/fi';
 
 type FormState = {
@@ -13,6 +12,39 @@ type FormState = {
 
 type SubmissionStatus = 'idle' | 'uploading' | 'submitting' | 'success' | 'error';
 const MAX_IMAGES = 3;
+
+const StatusToast: React.FC<{
+  message: string;
+  status: SubmissionStatus;
+}> = ({ message, status }) => {
+  if (!message) return null;
+
+  const getStatusIcon = () => {
+    switch (status) {
+      case 'success': return <FiCheck />;
+      case 'error': return <FiAlertCircle className="text-red-500" />;
+      case 'uploading': case 'submitting': return <FiLoader className="animate-spin text-blue-500" />;
+      default: return null;
+    }
+  };
+
+  const getStatusColor = () => {
+    switch (status) {
+      case 'success': return 'bg-gradient-to-r from-purple-200/50 to-purple-400/50 text-purple-900 border-purple-200/70 dark:from-purple-600/50 dark:to-purple-800/50 dark:text-purple-50 dark:border-purple-500/50';
+      case 'error': return 'border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-900 dark:text-red-300';
+      default: return 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-900 dark:text-blue-300';
+    }
+  };
+
+  return (
+    <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4 animate-slideInDown">
+      <div className={`p-3 rounded-xl border shadow-lg flex items-center gap-2 text-sm backdrop-blur-xl ${getStatusColor()}`}>
+        {getStatusIcon()}
+        <span className="font-medium [text-shadow:0_1px_2px_rgba(0,0,0,0.1)]">{message}</span>
+      </div>
+    </div>
+  );
+};
 
 export const ProblemForm: React.FC = () => {
   const { addItem, loading: historyLoading } = useHistoryData();
@@ -26,20 +58,24 @@ export const ProblemForm: React.FC = () => {
 
   const isSubmittable = (form.problemText.trim().length > 0 || form.imageFiles.length > 0) && submissionStatus === 'idle' && !historyLoading;
 
-  // CORRECTED: Memoize previewUrls to prevent re-creation on every render.
-  // This makes the dependency for the cleanup useEffect stable and more efficient.
   const previewUrls = useMemo(() => 
     form.imageFiles.map(file => URL.createObjectURL(file)), 
     [form.imageFiles]
   );
 
   useEffect(() => {
-    // This cleanup function will now only run when the component unmounts,
-    // preventing memory leaks from the object URLs.
     return () => {
       previewUrls.forEach(url => URL.revokeObjectURL(url));
     };
   }, [previewUrls]);
+  
+  useEffect(() => {
+    if (user && submissionStatus === 'error' && statusMessage === 'Please login to submit problems') {
+      setSubmissionStatus('idle');
+      setStatusMessage('');
+    }
+  }, [user, submissionStatus, statusMessage]);
+
 
   const handleTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const textarea = e.target;
@@ -56,7 +92,6 @@ export const ProblemForm: React.FC = () => {
     if (form.imageFiles.length + files.length > MAX_IMAGES) {
       setStatusMessage(`You can upload a maximum of ${MAX_IMAGES} images.`);
       setSubmissionStatus('error');
-      // Add a timeout to clear this specific error message
       setTimeout(() => {
         setSubmissionStatus('idle');
         setStatusMessage('');
@@ -70,7 +105,6 @@ export const ProblemForm: React.FC = () => {
   };
 
   const handleRemoveImage = (indexToRemove: number) => {
-    // The URL is revoked via the main useEffect cleanup when `previewUrls` updates.
     setForm(f => ({
       ...f,
       imageFiles: f.imageFiles.filter((_, index) => index !== indexToRemove),
@@ -104,34 +138,42 @@ export const ProblemForm: React.FC = () => {
       setSubmissionStatus('error');
       return;
     }
+    
+    // --- MODIFICATION START ---
+    // 1. Capture the form data before clearing it.
+    const dataToSubmit = { ...form };
+
+    // 2. Clear the form immediately for a better user experience.
+    setForm({ problemText: '', imageFiles: [] });
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    // --- MODIFICATION END ---
 
     setSubmissionStatus('uploading');
     setStatusMessage('Uploading images...');
 
     try {
       let uploadedImageUrls: string[] = [];
-      if (form.imageFiles.length > 0) {
-        uploadedImageUrls = await uploadImages(form.imageFiles);
-        setStatusMessage('Images uploaded! Submitting problem...');
+      // Use the captured data for submission
+      if (dataToSubmit.imageFiles.length > 0) {
+        uploadedImageUrls = await uploadImages(dataToSubmit.imageFiles);
       }
-
+      
       setSubmissionStatus('submitting');
       setStatusMessage('Submitting to backend...');
       
-      const problemTitle = form.problemText.trim();
+      // Use the captured data for submission
+      const problemTitle = dataToSubmit.problemText.trim();
 
       await addItem({
         title: problemTitle.length > 50 ? problemTitle.substring(0, 50) + '...' : problemTitle,
         problemText: problemTitle,
-        constraints: undefined,
-        testCases: undefined,
         imageUrl: uploadedImageUrls.join(','),
       });
 
       setSubmissionStatus('success');
-      setStatusMessage('Problem submitted successfully! Check history for solution.');
-      setForm({ problemText: '', imageFiles: [] });
-      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      setStatusMessage('Problem submitted successfully!');
+      // The form is already cleared, so we don't need to do it again here.
+      
       setTimeout(() => {
         setSubmissionStatus('idle');
         setStatusMessage('');
@@ -140,7 +182,12 @@ export const ProblemForm: React.FC = () => {
     } catch (error) {
       setSubmissionStatus('error');
       setStatusMessage(error instanceof Error ? error.message : 'Submission failed');
-      setTimeout(() => setSubmissionStatus('idle'), 5000);
+      // NOTE: If submission fails, the user's text is gone. This is a trade-off
+      // for the immediate clearing of the form.
+      setTimeout(() => {
+        setSubmissionStatus('idle');
+        setStatusMessage('');
+      }, 5000);
     }
   }, [user, form, addItem, isSubmittable]);
 
@@ -156,37 +203,18 @@ export const ProblemForm: React.FC = () => {
     }
   };
 
-  const getStatusIcon = () => {
-    switch (submissionStatus) {
-      case 'success':
-        return <FiCheck className="text-green-500" />;
-      case 'error':
-        return <FiAlertCircle className="text-red-500" />;
-      case 'uploading':
-      case 'submitting':
-        return <FiLoader className="animate-spin text-blue-500" />;
-      default:
-        return null;
-    }
-  };
-
-  const getStatusColor = () => {
-    switch (submissionStatus) {
-      case 'success':
-        return 'border-green-300 bg-green-50 text-green-700 dark:border-green-700 dark:bg-green-900 dark:text-green-300';
-      case 'error':
-        return 'border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-900 dark:text-red-300';
-      case 'uploading':
-      case 'submitting':
-        return 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-900 dark:text-blue-300';
-      default:
-        return 'border-neutral-300 bg-neutral-50 text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300';
-    }
-  };
-
   return (
-    // JSX remains the same
     <div className="flex h-screen flex-col bg-neutral-50 dark:bg-neutral-900">
+      <style>{`
+        @keyframes slideInDown {
+          from { opacity: 0; transform: translate(-50%, -100%); }
+          to { opacity: 1; transform: translate(-50%, 0); }
+        }
+        .animate-slideInDown { animation: slideInDown 0.5s ease-out forwards; }
+      `}</style>
+
+      <StatusToast message={statusMessage} status={submissionStatus} />
+      
       {selectedImage && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm transition-opacity"
@@ -211,7 +239,7 @@ export const ProblemForm: React.FC = () => {
       
       <div className="flex-1 flex items-center justify-center p-4">
         {form.problemText.trim() === '' && form.imageFiles.length === 0 && (
-          <h1 className="text-2xl font-semibold bg-gradient-to-r from-purple-500 to-blue-500 dark:from-purple-400 dark:to-blue-400 bg-clip-text text-transparent [filter:drop-shadow(0_2px_3px_rgba(168,85,247,0.4))]">
+          <h1 className="text-2xl font-semibold bg-gradient-to-r from-purple-500 to-blue-500 dark:from-purple-400 dark:to-blue-400 bg-clip-text text-transparent [filter:drop-shadow(0_2px_3px_rgba(168,85,2D47,0.4))]">
             Hello {user?.displayName || 'User'}, how can I help you today?
           </h1>
         )}
@@ -222,13 +250,6 @@ export const ProblemForm: React.FC = () => {
         className="sticky bottom-0 left-0 right-0 w-full bg-neutral-50/80 p-4 backdrop-blur-sm dark:bg-neutral-900/80"
       >
         <div className="mx-auto max-w-4xl">
-          {statusMessage && (
-            <div className={`p-3 mb-3 rounded-xl border shadow-sm flex items-center gap-2 text-sm ${getStatusColor()}`}>
-              {getStatusIcon()}
-              <span className="font-medium">{statusMessage}</span>
-            </div>
-          )}
-
           {previewUrls.length > 0 && (
             <div className="mb-3 flex flex-wrap gap-3">
               {previewUrls.map((url, index) => (
