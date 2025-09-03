@@ -9,3 +9,4 @@ autogen-ext
 autogen-ext[openai]
 pydantic
 docker
+pillow
