@@ -4,14 +4,21 @@ from pydantic import BaseModel
 from typing import Optional, List, Any, Dict
 from datetime import datetime
 import os
+import json
+import time
+from pathlib import Path
 
-# Database (SQLite via SQLAlchemy)
+# Database (SQLAlchemy)
 from sqlalchemy import create_engine, Column, String, Text, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 
 # Firebase Admin for token verification
 import firebase_admin
 from firebase_admin import credentials, auth as fb_auth
+
+# Import the main function from your agent pipeline orchestrator
+# Using an alias to make the purpose clear
+from app.agentic_ai.final import main as run_autogen_pipeline
 
 
 # ---------- Config ----------
@@ -32,7 +39,6 @@ def init_firebase_admin() -> None:
         cred = credentials.Certificate(service_account_path)
         firebase_admin.initialize_app(cred)
     else:
-        # Attempt default app init (for environments with ADC configured)
         try:
             firebase_admin.initialize_app()
         except Exception as e:
@@ -44,7 +50,6 @@ def init_firebase_admin() -> None:
 # ---------- Models ----------
 class HistoryORM(Base):
     __tablename__ = "history"
-
     _id = Column(String, primary_key=True)
     userId = Column(String, index=True, nullable=False)
     title = Column(String, nullable=False)
@@ -69,7 +74,6 @@ class ProblemSubmission(BaseModel):
     testCases: Optional[str] = None
     imageUrl: Optional[str] = None
 
-
 class BackendResponse(BaseModel):
     success: bool
     message: str
@@ -88,27 +92,15 @@ def get_db():
     finally:
         db.close()
 
-
 def get_current_user_id(authorization: Optional[str] = Header(None), request: Optional[Request] = None) -> str:
     init_firebase_admin()
     token: Optional[str] = None
-
-    # 1) Try Authorization header: "Bearer <token>"
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ", 1)[1].strip()
-
-    # 2) Try common fallbacks to make local debugging easier
     if not token and request is not None:
-        # Query param ?token=...
-        token = request.query_params.get("token") or token
-        # Cookie named "token" or "Authorization" (value may or may not include "Bearer ")
-        if not token:
-            cookie_token = request.cookies.get("token") or request.cookies.get("Authorization")
-            if cookie_token:
-                token = cookie_token[7:].strip() if cookie_token.lower().startswith("bearer ") else cookie_token
-
+        token = request.query_params.get("token")
     if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token. Provide 'Authorization: Bearer <ID_TOKEN>' header or ?token=<ID_TOKEN> for debugging.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token.")
     try:
         decoded = fb_auth.verify_id_token(token)
         uid = decoded.get("uid")
@@ -141,7 +133,7 @@ def serialize_history(item: HistoryORM) -> Dict[str, Any]:
         "constraints": item.constraints,
         "testCases": item.testCases,
         "imageUrl": item.imageUrl,
-        "solution": None if not item.solution else __import__("json").loads(item.solution),
+        "solution": json.loads(item.solution) if item.solution else None,
         "status": item.status,
         "createdAt": item.createdAt.isoformat() if item.createdAt else None,
         "updatedAt": item.updatedAt.isoformat() if item.updatedAt else None,
@@ -173,7 +165,7 @@ def get_history_item(item_id: str, authorization: Optional[str] = Header(None), 
 
 @app.post("/problems/submit", response_model=BackendResponse)
 def submit_problem(payload: ProblemSubmission, background_tasks: BackgroundTasks, authorization: Optional[str] = Header(None), request: Request = None, db: Session = Depends(get_db)):
-    import uuid, json
+    import uuid
 
     uid = get_current_user_id(authorization, request)
     now = datetime.utcnow()
@@ -219,65 +211,102 @@ def delete_history(authorization: Optional[str] = Header(None), request: Request
     return BackendResponse(success=True, message=f"Deleted {deleted} records", data={"deleted": deleted})
 
 
-# ---------- Background Task ----------
+# ---------- Background Task (Now the Main Logic) ----------
 def _compute_solution_task(item_id: str):
-    import json, time
-    from pathlib import Path
     db = SessionLocal()
     try:
         row = db.query(HistoryORM).filter(HistoryORM._id == item_id).first()
         if not row:
+            print(f"ERROR: No problem found with ID {item_id} to process.")
             return
 
-        # Try demo solution from solutions.json (testing only)
-        solution_payload = None
+        print(f"--- Starting Autogen pipeline for problem ID: {item_id} ---")
+        
+        solution_result = None
+        pipeline_succeeded = False
         try:
-            repo_root = Path(__file__).resolve().parent.parent
-            demo_path = repo_root / "solutions.json"
-            if demo_path.exists():
-                with open(demo_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    chosen = None
-                    if isinstance(data, list) and data:
-                        for s in data:
-                            if isinstance(s, dict) and s.get("status") == "solved" and s.get("team") != "Rescue_Team":
-                                chosen = s
-                                break
-                        if chosen is None:
-                            chosen = data[0]
-                    elif isinstance(data, dict):
-                        chosen = data
-                    if chosen:
-                        solution_payload = {
-                            "problemId": row._id,
-                            "solution": chosen.get("summary") or chosen.get("solution") or "Demo solution",
-                            "timeComplexity": chosen.get("time_complexity") or chosen.get("timeComplexity"),
-                            "spaceComplexity": chosen.get("space_complexity") or chosen.get("spaceComplexity"),
-                            "explanation": chosen.get("explanation"),
-                            "codeSnippets": [c for c in [chosen.get("code")] if c],
-                        }
-        except Exception:
-            solution_payload = None
+            # Call the main function from final.py with data from the database
+            solution_result = run_autogen_pipeline(
+                text=row.problemText or "",
+                image_url=row.imageUrl,
+                constraints=row.constraints or "",
+                test_cases=row.testCases or ""
+            )
+            # Check if the pipeline returned an error
+            if not solution_result.get("error"):
+                pipeline_succeeded = True
+                print(f"--- Pipeline SUCCEEDED for problem ID: {item_id} ---")
+                row.status = "solved"
+                # The fitter agent provides a dictionary with all the required keys
+                solution_payload = {
+                    "problemId": row._id,
+                    "solution": solution_result.get("approach"),
+                    "timeComplexity": solution_result.get("time_complexity"),
+                    "spaceComplexity": solution_result.get("space_complexity"),
+                    "explanation": solution_result.get("approach"), # Use approach as explanation
+                    "codeSnippets": [solution_result.get("code")] if solution_result.get("code") else [],
+                }
+                row.solution = json.dumps(solution_payload)
+            else:
+                 print(f"--- Pipeline FAILED for problem ID: {item_id} ---")
+                 print(f"Error Details: {solution_result.get('details')}")
 
-        if solution_payload is None:
-            time.sleep(0.1)
-            solution_payload = {
-                "problemId": row._id,
-                "solution": "Solution processing completed.",
-                "timeComplexity": None,
-                "spaceComplexity": None,
-                "explanation": None,
-                "codeSnippets": [],
-            }
-        row.solution = json.dumps(solution_payload)
-        row.status = "solved"
+        except Exception as e:
+            print(f"--- Pipeline execution raised an exception for problem ID: {item_id}: {e} ---")
+            solution_result = {"error": "Pipeline execution failed with an exception", "details": str(e)}
+
+        # Fallback to demo solution if the pipeline did not succeed
+        if not pipeline_succeeded:
+            print(f"--- Attempting to load demo solution for problem ID: {item_id} ---")
+            solution_payload = None
+            try:
+                repo_root = Path(__file__).resolve().parent.parent
+                demo_path = repo_root / "solutions.json"
+                if demo_path.exists():
+                    with open(demo_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        chosen = None
+                        if isinstance(data, list) and data:
+                            for s in data:
+                                if isinstance(s, dict) and s.get("status") == "solved" and s.get("team") != "Rescue_Team":
+                                    chosen = s
+                                    break
+                            if chosen is None:
+                                chosen = data[0]
+                        elif isinstance(data, dict):
+                            chosen = data
+                        if chosen:
+                            solution_payload = {
+                                "problemId": row._id,
+                                "solution": chosen.get("summary") or chosen.get("solution") or "Demo solution",
+                                "timeComplexity": chosen.get("time_complexity") or chosen.get("timeComplexity"),
+                                "spaceComplexity": chosen.get("space_complexity") or chosen.get("spaceComplexity"),
+                                "explanation": chosen.get("explanation"),
+                                "codeSnippets": [c for c in [chosen.get("code")] if c],
+                            }
+            except Exception as e:
+                print(f"--- Could not load demo solution: {e} ---")
+                solution_payload = None
+            
+            if solution_payload:
+                 row.solution = json.dumps(solution_payload)
+                 row.status = "solved" # From demo
+            else:
+                row.status = "failed"
+                # Store the actual pipeline error message for debugging
+                row.solution = json.dumps(solution_result)
+
+
         row.updatedAt = datetime.utcnow()
         db.add(row)
         db.commit()
-    except Exception:
-        # Mark as failed if something goes wrong
-        if 'row' in locals() and row is not None:
+
+    except Exception as e:
+        print(f"FATAL: Unhandled exception in _compute_solution_task for {item_id}: {e}")
+        # Mark as failed if any unexpected error occurs
+        if 'row' in locals() and row:
             row.status = "failed"
+            row.solution = json.dumps({"error": "An unexpected error occurred in the backend task.", "details": str(e)})
             row.updatedAt = datetime.utcnow()
             db.add(row)
             db.commit()

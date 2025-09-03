@@ -1,26 +1,26 @@
 [
     {
         "team": "A_Team",
-        "code": "import java.util.HashMap;\nimport java.util.Map;\n\nclass Solution {\n    public int[] twoSum(int[] nums, int target) {\n        Map<Integer, Integer> numMap = new HashMap<>();\n        for (int i = 0; i < nums.length; i++) {\n            int complement = target - nums[i];\n            if (numMap.containsKey(complement)) {\n                return new int[] { numMap.get(complement), i };\n            }\n            numMap.put(nums[i], i);\n        }\n        return new int[] {}; // Should not happen as per the problem statement\n    }\n}",
+        "code": "class Solution {\n    public int reverse(int x) {\n        int reversed = 0;\n        while (x != 0) {\n            int pop = x % 10;\n            x /= 10;\n            if (reversed > Integer.MAX_VALUE / 10 || (reversed == Integer.MAX_VALUE / 10 && pop > 7)) return 0;\n            if (reversed < Integer.MIN_VALUE / 10 || (reversed == Integer.MIN_VALUE / 10 && pop < -8)) return 0;\n            reversed = reversed * 10 + pop;\n        }\n        return reversed;\n    }\n}",
         "status": "solved",
-        "summary": "Uses a HashMap to store each number and its index. For each number, it checks if the complement (target - number) exists in the map. If it does, it returns the indices of the number and its complement.",
-        "time_complexity": "O(n)",
-        "space_complexity": "O(n)"
+        "summary": "The code reverses an integer digit by digit. It handles potential overflow issues by checking if the intermediate reversed value is close to the maximum or minimum integer values before appending the next digit.",
+        "time_complexity": "O(log(x))",
+        "space_complexity": "O(1)"
     },
     {
         "team": "B_Team",
-        "code": "import java.util.HashMap;\nimport java.util.Map;\n\nclass Solution {\n    public int[] twoSum(int[] nums, int target) {\n        Map<Integer, Integer> numMap = new HashMap<>();\n        for (int i = 0; i < nums.length; i++) {\n            int complement = target - nums[i];\n            if (numMap.containsKey(complement)) {\n                return new int[] {numMap.get(complement), i};\n            }\n            numMap.put(nums[i], i);\n        }\n        return new int[] {}; // Should never happen, given the problem constraints\n    }\n}",
+        "code": "class Solution {\n    public int reverse(int x) {\n        int reversed = 0;\n        while (x != 0) {\n            int digit = x % 10;\n            x /= 10;\n\n            if (reversed > Integer.MAX_VALUE / 10 || (reversed == Integer.MAX_VALUE / 10 && digit > 7)) {\n                return 0;\n            }\n            if (reversed < Integer.MIN_VALUE / 10 || (reversed == Integer.MIN_VALUE / 10 && digit < -8)) {\n                return 0;\n            }\n\n            reversed = reversed * 10 + digit;\n        }\n        return reversed;\n    }\n}",
         "status": "solved",
-        "summary": "This code uses a HashMap to find two numbers in an array that add up to a target value. It iterates through the array, storing each number and its index in the map. For each number, it checks if the complement exists in the map, and if so, returns the indices.",
-        "time_complexity": "O(n)",
-        "space_complexity": "O(n)"
+        "summary": "The code reverses an integer by extracting digits and rebuilding the reversed number. Overflow is checked before each digit addition to ensure the result stays within the integer range.",
+        "time_complexity": "O(log(abs(x)))",
+        "space_complexity": "O(1)"
     },
     {
         "team": "C_Team",
-        "code": "import java.util.HashMap;\nimport java.util.Map;\n\nclass Solution {\n    public int[] twoSum(int[] nums, int target) {\n        Map<Integer, Integer> numMap = new HashMap<>();\n        for (int i = 0; i < nums.length; i++) {\n            int complement = target - nums[i];\n            if (numMap.containsKey(complement)) {\n                return new int[] {numMap.get(complement), i };\n            }\n            numMap.put(nums[i], i);\n        }\n        return new int[] {}; // Should never happen as problem guarantees a solution\n    }\n}",
+        "code": "class Solution {\n    public int reverse(int x) {\n        int reversed = 0;\n        while (x != 0) {\n            int digit = x % 10;\n            x /= 10;\n\n            if (reversed > Integer.MAX_VALUE / 10 || (reversed == Integer.MAX_VALUE / 10 && digit > 7)) return 0;\n            if (reversed < Integer.MIN_VALUE / 10 || (reversed == Integer.MIN_VALUE / 10 && digit < -8)) return 0;\n\n            reversed = reversed * 10 + digit;\n        }\n        return reversed;\n    }\n}",
         "status": "solved",
-        "summary": "The algorithm utilizes a HashMap to store each number's value and index. It iterates through the array, and for each number, it checks if its complement (target - number) exists in the HashMap. If found, it returns the indices of the two numbers.",
-        "time_complexity": "O(n)",
-        "space_complexity": "O(n)"
+        "summary": "The integer is reversed digit by digit. Overflow is checked before each digit is added to the reversed number to prevent integer overflow.",
+        "time_complexity": "O(log10(abs(x)))",
+        "space_complexity": "O(1)"
     }
 ]

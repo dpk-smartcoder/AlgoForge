@@ -2,6 +2,7 @@ import os
 import json
 import asyncio
 import logging
+import re
 from io import BytesIO
 from dotenv import load_dotenv
 import requests
@@ -45,11 +46,8 @@ class ExtractorAgent:
 
             content_parts = []
 
-            if isinstance(payload, str) and payload.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
-                pil_image = PILImage.open(payload)
-                content_parts.append(Image(pil_image))
-
-            elif isinstance(payload, str) and payload.startswith("http"):
+            # Prioritize URL check over file extension check
+            if isinstance(payload, str) and payload.startswith("http"):
                 try:
                     response = requests.get(payload)
                     if response.status_code == 200:
@@ -61,10 +59,11 @@ class ExtractorAgent:
                 except requests.RequestException as e:
                     logger.error(f"RequestException while fetching image from URL: {payload}: {e}")
                     raise
-
+            elif isinstance(payload, str) and payload.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+                pil_image = PILImage.open(payload)
+                content_parts.append(Image(pil_image))
             elif isinstance(payload, PILImage.Image):
                 content_parts.append(Image(payload))
-
             else:
                 content_parts.append(str(payload))
 
@@ -95,7 +94,7 @@ class ExtractorAgent:
 
     async def extract_image(self, image, user_text=None):
         """
-        Extracts from images and optional user_text.
+        Extracts from images and optional user_text, merging structured data.
         """
         if image is None and not user_text:
             logger.warning("No image or user_text provided to extract_image")
@@ -110,25 +109,64 @@ class ExtractorAgent:
         else:
             logger.info("No images provided, only user_text will be used")
 
-        combined_text = ""
+        unstructured_text = ""
+        merged_data = {
+            "problem": {
+                "title": None,
+                "statement": "",
+                "constraint": [],
+                "test_case": []
+            }
+        }
+
         if images:
             try:
                 tasks = [self._call_llm_with_timeout(img) for img in images]
                 image_texts = await asyncio.gather(*tasks)
-                combined_text = "\n---\n".join(image_texts)
+                
+                for text_blob in image_texts:
+                    try:
+                        match = re.search(r'```json\s*(\{.*?\})\s*```', text_blob, re.DOTALL)
+                        json_str = match.group(1) if match else text_blob
+                        
+                        start = json_str.find('{')
+                        end = json_str.rfind('}')
+                        if start != -1 and end != -1:
+                            json_str = json_str[start:end+1]
+                        
+                        data = json.loads(json_str)
+                        problem = data.get("problem", {})
+
+                        if not merged_data["problem"]["statement"] and problem.get("statement"):
+                            merged_data["problem"]["statement"] = problem["statement"]
+                        
+                        if problem.get("constraint"):
+                            for c in problem["constraint"]:
+                                if c not in merged_data["problem"]["constraint"]:
+                                    merged_data["problem"]["constraint"].append(c)
+
+                        if problem.get("test_case"):
+                             for tc in problem["test_case"]:
+                                if tc not in merged_data["problem"]["test_case"]:
+                                    merged_data["problem"]["test_case"].append(tc)
+                    except (json.JSONDecodeError, AttributeError):
+                        unstructured_text += f"\n---\n{text_blob}"
+
             except Exception as e:
                 logger.error(f"Error during image extraction: {e}")
                 raise
 
+        # Combine the merged structured data with any unstructured text
+        final_prompt_text = json.dumps(merged_data, indent=4) + unstructured_text
         if user_text:
-            combined_text = f"{combined_text}\n---\n{user_text}" if combined_text else user_text
+            final_prompt_text += f"\n\n--- Additional Context ---\n{user_text}"
 
         source_input = {
             "source_images": images if images else None,
             "source_text": user_text if user_text else None
         }
 
-        await self.extract_text(combined_text, source_input=source_input)
+        await self.extract_text(final_prompt_text, source_input=source_input)
 
     async def extract_text(self, text, source_input=None):
         """
@@ -153,7 +191,19 @@ class ExtractorAgent:
                     extracted_json = extracted
                 elif isinstance(extracted, str):
                     try:
-                        extracted_json = json.loads(extracted)
+                        # Find json block within the text
+                        match = re.search(r'```json\s*(\{.*?\})\s*```', extracted, re.DOTALL)
+                        if match:
+                            json_str = match.group(1)
+                        else: # Fallback to finding first { and last }
+                            start = extracted.find('{')
+                            end = extracted.rfind('}')
+                            if start != -1 and end != -1:
+                                json_str = extracted[start:end+1]
+                            else:
+                                json_str = extracted
+                        extracted_json = json.loads(json_str)
+
                     except json.JSONDecodeError:
                         convert_prompt = f"Please convert the following text to valid JSON:\n{extracted}"
                         extracted_json_str = await self._call_llm_with_timeout(convert_prompt)
@@ -217,3 +267,4 @@ class ExtractorAgent:
                     raise
 
         raise RuntimeError("Failed to extract and verify data after maximum attempts")
+

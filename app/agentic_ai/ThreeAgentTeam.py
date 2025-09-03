@@ -9,6 +9,8 @@ import asyncio
 import inspect
 import difflib
 import re
+import sys
+
 def safe_load_json(path, default=None):
     if default is None:
         default = {}
@@ -60,7 +62,7 @@ summarizer=AssistantAgent(
 )
 
 data = safe_load_json("data.json", {"problem": {}})
-randomTestCase = safe_load_json("random.json", {"test_case": []})
+# randomTestCase = safe_load_json("random.json", {"test_case": []})
 
 problem_data = data.get("problem", {})
 
@@ -79,7 +81,7 @@ if not isinstance(constraint_text, str):
 # --- END FIX ---
 
 merged_test_cases = normalize_test_cases(problem_data.get("test_case", []))
-merged_test_cases.extend(normalize_test_cases(randomTestCase.get("test_case", [])))
+# merged_test_cases.extend(normalize_test_cases(randomTestCase.get("test_case", [])))
 
 # Deduplicate merged_test_cases while preserving order
 seen = set()
@@ -447,8 +449,17 @@ Update your code by integrating the useful logic from this attempt while keeping
         json.dump(solutions_log, f, indent=4)
 
 if __name__ == "__main__":
-    import sys
     async def _main_and_log_all():
+        # --- NEW: Add a pre-flight check for necessary data ---
+        if not statement_text or not merged_test_cases:
+            error_msg = "[FATAL] Incomplete data from 'data.json'. The problem statement and/or test cases are missing."
+            print(error_msg)
+            # Write an error to solutions.json so the downstream FitterAgent knows something went wrong.
+            with open("solutions.json", "w") as f:
+                json.dump([{"status": "failed", "error": error_msg}], f, indent=4)
+            # Exit gracefully to prevent further execution with bad data.
+            return
+
         teams = [teamA, teamB, teamC]
         solutions_log = []
         # Run all teams independently in parallel (Phase 1 + Phase 2)
@@ -688,3 +699,4 @@ if __name__ == "__main__":
             json.dump(solutions_log, f, indent=4)
 
     asyncio.run(_main_and_log_all())
+
