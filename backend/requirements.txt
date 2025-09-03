@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+firebase-admin
+python-dotenv
+autogen-agentchat
+autogen-core
+autogen-ext
+autogen-ext[openai]
+pydantic
+docker
+pillow
